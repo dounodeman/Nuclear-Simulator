@@ -208,10 +208,10 @@
     <p id="updMsg" class="upd-msg">Checking…</p>
     <pre id="updNotes" class="upd-notes" hidden></pre>
     <div id="tokenRow" class="token-row">
-      <label for="tokenInput">GitHub token</label>
+      <label for="tokenInput">GitHub token (optional)</label>
       <input id="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
-      <p class="hint">The repository is private, so the app needs a fine-grained token with read-only
-        <b>Contents</b> access to dounodeman/nuclear-simulator to see new builds. It is stored only on this Mac.</p>
+      <p class="hint">Not needed: the repository is public. A fine-grained token with read-only <b>Contents</b>
+        access raises the API rate limit and keeps updates working if the repository is made private. It is stored only on this Mac.</p>
     </div>
     <div class="dlg-actions">
       <span id="buildInfo" class="hint"></span>

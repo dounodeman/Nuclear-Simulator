@@ -1,6 +1,7 @@
 """The control-room app: live session, local HTTP API and update checks."""
 
 import json
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -139,3 +140,16 @@ def test_token_storage_is_private(tmp_path, monkeypatch):
     assert (tmp_path / "settings.json").stat().st_mode & 0o077 == 0
     updates.set_token(None)
     assert updates.token() is None
+
+
+def test_update_check_needs_no_token(monkeypatch):
+    """The repository is public: the API request carries no Authorization header unless a token is set."""
+    monkeypatch.delenv("REACTORSIM_GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(updates, "load_settings", lambda: {})
+    req = updates._request("https://api.github.com/x", updates.token())
+    assert not req.has_header("Authorization")
+    assert updates._request("https://api.github.com/x", "tok").get_header("Authorization") == "Bearer tok"
+    # download() no longer refuses to run without a token (only without an asset).
+    info = updates.UpdateInfo("available", 1, latest=2, asset_url=None)
+    with pytest.raises(RuntimeError, match="no update asset"):
+        updates.download(info, Path("/nonexistent"))

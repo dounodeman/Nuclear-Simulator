@@ -88,9 +88,10 @@ experiments, rod and instrument faults, a chiller trip, a pool leak and protecti
 2. The app is not signed with an Apple developer certificate, so macOS blocks the first
    launch. Open it once, then go to System Settings > Privacy & Security and click
    **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/PUR-1 Simulator.app"`).
-3. In the app, click **Updates** and paste a GitHub fine-grained token with read-only
-   *Contents* access to this repository. The repository is private, so the app needs it to
-   see new builds. It is stored only on that Mac.
+3. That is all: the repository is public, so the app needs no token to see new builds. (The
+   **Updates** dialog still accepts an optional GitHub token, which raises the API rate limit
+   and keeps updates working if the repository is ever made private; it is stored only on
+   that Mac.)
 
 From then on the app checks for a newer build when it opens, and **Install and restart**
 downloads it, swaps it in place and relaunches.
