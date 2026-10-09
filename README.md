@@ -47,6 +47,13 @@ sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
 ```
 
+## 3D models
+
+Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area,
+exported as glTF for the control-room interface, live in [models/](models/README.md).
+
+![PUR-1 reactor hall](models/renders/reactor_hall_overview.png)
+
 ## Scenarios
 
 | Scenario | What happens |
