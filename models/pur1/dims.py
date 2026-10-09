@@ -17,9 +17,12 @@ LINER_THICKNESS = 1.0 / 16 * IN      # SOURCED: 1/16 in stainless liner (1968)
 TANK_WALL = 0.5 * IN                 # ASSUMED: outer carbon-steel tank wall
 SAND_GAP = 0.30                      # ASSUMED: sand-filled annulus between liner tank and steel tank
 SHIELD_TOP_Z = 3.0 * FT              # SOURCED: concrete biological shield wall 3 ft above floor
-SHIELD_OUTER_RADIUS = 8.0 * FT       # ASSUMED: ~4 ft of concrete around the tank above floor
+SHIELD_OUTER_RADIUS = 2.0            # ASSUMED from the reference photos: the black-clad pool wall is about 4 m across
 SHIELD_BELOW_HALF = 3.5              # ASSUMED: half-width of the square concrete block below floor
-RAIL_HEIGHT = 42 * IN                # ASSUMED: guard rail on top of the shield (OSHA height)
+POOL_LIP_WIDTH = 0.18                # ASSUMED (photos): grey top lip around the water opening
+POOL_STRIPE_WIDTH = 0.10             # ASSUMED (photos): yellow stripe on the outer edge of the top lip
+FLOOR_STRIPE_RADIUS = SHIELD_OUTER_RADIUS + 0.75   # ASSUMED (photos): yellow floor stripe around the pool
+GRAPHIC_ANGLE = -0.55                # ASSUMED: the PUR-1 lettering faces the console and the main door (radians from +X)
 
 # ---- Core --------------------------------------------------------------------
 GRID_PITCH = 3.0 * IN                # ASSUMED: lattice pitch (element footprint ~7 cm + clearance)
@@ -61,8 +64,17 @@ WALL_T = 0.30                        # ASSUMED: concrete block
 DOOR_W, DOOR_H = 1.0, 2.1            # ASSUMED: personnel doors (3) + storage-room door (1)
 
 # ---- Console and video wall --------------------------------------------------
-CONSOLE_POS = (5.6, 0.0, 0.0)        # ASSUMED: console east of the pool, operator faces the video wall
-CONSOLE_SIZE = (0.95, 2.60, 0.78)    # ASSUMED: depth x width x desk height
+CONSOLE_POS = (4.6, 1.3, 0.0)        # ASSUMED (photos): desk console a few feet east of the pool, operator faces +X
+CONSOLE_SIZE = (0.80, 2.00, 0.74)    # ASSUMED (photos): desk depth x width x height
+CONSOLE_MONITORS = 3                 # ASSUMED (photos): three monitors on the desk, one of them the RTP operator display
+MAT_SIZE = (2.6, 3.2)                # ASSUMED (photos): dark carpet mat under the console
+CABINET_SIZE = (0.80, 0.60, 2.10)    # ASSUMED (photos): black digital I&C cabinets (depth, width, height)
+CABINET_COUNT = 4                    # ASSUMED (photos): four cabinets in a row behind the console
+CABINET_FIRST_Y = -2.3               # ASSUMED: cabinets along the east wall, south of the video wall, running south
+DIAG_BENCH_POS = (3.6, -5.35, 0.0)   # ASSUMED (photos): diagnostics bench against the south wall, west of the main door
+STAIR_ORIGIN = (-2.6, 5.0, 0.0)      # ASSUMED (photos): stair up to a platform along the north wall (1 m wide treads)
+STAIR_RISE, STAIR_RUN, STAIR_STEPS = 0.19, 0.27, 11   # ASSUMED: 2.1 m platform height
+PLATFORM_SIZE = (3.0, 1.4)           # ASSUMED: platform length (x) by depth (y)
 VIDEO_WALL_PANEL = (1.44, 0.81)      # ASSUMED: 65 in 16:9 panels
 VIDEO_WALL_GRID = (4, 3)             # derived: 12 x 1.17 m2 = 14 m2 = 150 ft2 (SOURCED total area)
 VIDEO_WALL_CENTER_Z = 2.3            # ASSUMED

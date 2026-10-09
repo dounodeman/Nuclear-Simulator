@@ -51,21 +51,29 @@ print(sim.status()["scram_causes"])      # period and power scrams
 
 ![The console in the reactor hall](docs/img/control_room.png)
 
-You are an operator standing in the PUR-1 reactor hall. Walk around it in first person
-(WASD, Shift to run, mouse to look), climb the steps to the shield deck and look down into
-the pool, and operate the reactor from the console on the east wall:
+You are an operator standing in the PUR-1 reactor hall, modelled on the real room: the round
+black pool wall with the PUR-1 graphic and its yellow safety rim, the bridge with the five drive
+housings over the water, the stair up to the north platform, the tiled video wall on the east
+wall, the black digital I&C cabinets with their red LED readouts, and the desk console with
+three monitors and blue chairs a few steps from the pool. Walk around it in first person
+(WASD, Shift to run, mouse to look), climb the stair for a view down into the pool, and operate
+the reactor from the console:
 
-- **Workstation 1, reactor control** (right-hand screen): the four neutron channels, rod
+- **Workstation 1, reactor control** (left-hand monitor): the four neutron channels, rod
   drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
   reset, and the annunciators.
-- **Workstation 2, plant data** (left-hand screen): the power history, a core camera, pool and
+- **Workstation 2, plant data** (right-hand monitor): the power history, a core camera, pool and
   radiation readings, reactivity and the event log.
+- **RTP 3000 operator display** (centre monitor): a read-only core mimic with the rod
+  positions, power, period, pool and protection status.
 - **Hard-wired controls** on the console: hold a rod drive's UP or DOWN button to move it,
   the red manual scram button, the magnet power switch (scram) and the master key switch
   (scram reset), plus NS buttons for the startup source. The hallway scram button by the
   south door works too.
 
-The screens, rod position readouts, annunciator lamps and the 4 x 3 video wall show the live
+![The hard-wired panel on the console](docs/img/console_panel.png)
+
+The monitors, rod position readouts, annunciator lamps and the 4 x 3 video wall show the live
 plant, and the blades in the core move with the rods. Esc opens a menu with the simulation
 speed (1x to 100x), restart, true plant values and the instructor station, which injects
 experiments, rod and instrument faults, a chiller trip, a pool leak and protection failures.
@@ -80,9 +88,10 @@ experiments, rod and instrument faults, a chiller trip, a pool leak and protecti
 2. The app is not signed with an Apple developer certificate, so macOS blocks the first
    launch. Open it once, then go to System Settings > Privacy & Security and click
    **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/PUR-1 Simulator.app"`).
-3. In the app, click **Updates** and paste a GitHub fine-grained token with read-only
-   *Contents* access to this repository. The repository is private, so the app needs it to
-   see new builds. It is stored only on that Mac.
+3. That is all: the repository is public, so the app needs no token to see new builds. (The
+   **Updates** dialog still accepts an optional GitHub token, which raises the API rate limit
+   and keeps updates working if the repository is ever made private; it is stored only on
+   that Mac.)
 
 From then on the app checks for a newer build when it opens, and **Install and restart**
 downloads it, swaps it in place and relaunches.

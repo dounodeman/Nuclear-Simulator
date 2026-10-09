@@ -2,9 +2,10 @@
 //
 // Loads models/export/reactor_hall.glb (Y up, metres, pool centre at the origin, floor at y = 0,
 // console and video wall to the east, +x). The operator walks with WASD and looks with the mouse.
-// Every control is on the console: the two workstation screens open the reactor-control and
-// plant-data computers, and the hard-wired buttons (rod drives, scram, magnet power, key switch)
-// act directly. Screens, rod readouts, annunciators and the video wall show the live plant.
+// Every control is on the desk console: the left and right monitors open the reactor-control and
+// plant-data computers, the centre monitor mirrors the RTP operator display, and the hard-wired
+// buttons (rod drives, scram, magnet power, key switch) act directly. Screens, rod readouts,
+// annunciators, the I&C cabinet readouts and the video wall show the live plant.
 import * as THREE from "three";
 import { GLTFLoader } from "./vendor/three/loaders/GLTFLoader.js";
 
@@ -14,8 +15,8 @@ const STEP_UP = 0.42;      // highest step the walker climbs, m
 const STEP_DOWN = 0.5;     // largest drop the walker takes; anything deeper is a ledge
 const WALK = 1.5, RUN = 3.2;  // m/s
 const REACH = 2.3;         // how far away a control can be used, m
-const SHIELD_CLEAR = 2.29 + RADIUS;  // the deck guard rail keeps walkers out of this radius
-const SPAWN = { x: 4.3, z: 3.2, yaw: Math.atan2(4.3, 3.2), pitch: -0.12 };  // facing the pool
+const SHIELD_CLEAR = 2.0 + RADIUS;   // the black pool wall (radius 2 m) keeps walkers out of this radius
+const SPAWN = { x: 6.0, z: 5.0, yaw: Math.atan2(6.0, 5.0), pitch: -0.08 };  // inside the main door, facing the pool
 
 // What each named object on the console does.
 const ROD_BUTTON = /^ui_Rod_(SS1|SS2|RR|NS|FC)_(Up|Down)$/;
@@ -27,15 +28,25 @@ const LABELS = {
   ui_Display_Right: ["station", "plant", "Plant data workstation"],
   Display_Right_Bezel: ["station", "plant", "Plant data workstation"],
   Keyboard_2: ["station", "plant", "Plant data workstation"],
+  Mouse: ["station", "plant", "Plant data workstation"],
+  ui_Display_Center: ["info", null, "RTP 3000 operator display: core mimic (read only)"],
+  Display_Center_Bezel: ["info", null, "RTP 3000 operator display: core mimic (read only)"],
+  Keyboard_3: ["info", null, "RTP 3000 operator display: core mimic (read only)"],
+  Telephone: ["info", null, "Telephone to the control point and campus police"],
   ui_Scram_Console: ["scram", null, "Manual SCRAM (console)"],
   ui_Scram_Hallway: ["scram", null, "Manual SCRAM (hallway)"],
   ui_MagnetPower_Switch: ["scram", null, "Magnet power: cut (scram)"],
   ui_KeySwitch_Master: ["reset", null, "Master key switch: reset scram"],
-  Rack_1_RTP3000_RPS_RCS: ["info", null, "Rack 1: RTP 3000 protection and control system"],
-  Rack_2_Mirion_NI_Channels: ["info", null, "Rack 2: Mirion nuclear instrument channels"],
-  Rack_3_Historian_Workstation: ["info", null, "Rack 3: historian"],
-  Rack_4_DataDiode_Network: ["info", null, "Rack 4: data diode and network"],
-  Rack_5_UPS_30min: ["info", null, "Rack 5: UPS, 30 minutes"],
+  Cabinet_1_RTP3000_RPS_RCS: ["info", null, "Cabinet 1: RTP 3000 protection and control system"],
+  Cabinet_2_Mirion_NI_Channels: ["info", null, "Cabinet 2: Mirion nuclear instrument channels"],
+  Cabinet_3_Historian_DataDiode: ["info", null, "Cabinet 3: historian, data diode and network"],
+  Cabinet_4_UPS_30min: ["info", null, "Cabinet 4: UPS, 30 minutes"],
+  DiagBench_Top: ["info", null, "Diagnostics bench: data analysis and training workstations"],
+  DiagBench_Rack: ["info", null, "Portable diagnostics rack"],
+  Whiteboard: ["info", null, "Whiteboard: today's operations plan"],
+  Stair_North: ["info", null, "Stair to the north platform"],
+  Graphic_PUR1: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
+  Graphic_Tagline: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
   Chiller_36kBtu: ["info", null, "Pool chiller, 36 kBtu/h"],
   IonExchanger_MixedBed: ["info", null, "Mixed-bed ion exchanger"],
   Pump_30gpm: ["info", null, "Primary purification pump, 30 gpm"],
@@ -114,7 +125,7 @@ export class HallWorld {
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       const name = this._named(o);
-      if (!name.startsWith("fx_") && !["Ceiling", "HVAC_Ducts", "LightFixtures"].includes(name)) {
+      if (!name.startsWith("fx_") && !["Ceiling", "HVAC_Ducts", "LightFixtures", "Conduit", "MonorailHoist", "Cabinet_CableTray"].includes(name)) {
         this.colliders.push(o);
       }
       const rod = /^ui_Rod_(SS1|SS2|RR)$/.exec(name);
@@ -145,6 +156,7 @@ export class HallWorld {
     // Live screens: workstation displays, rod position readouts and the 4 x 3 video wall.
     this.screens.left = this._screen("ui_Display_Left", 1024, 576);
     this.screens.right = this._screen("ui_Display_Right", 1024, 576);
+    this.screens.center = this._screen("ui_Display_Center", 1024, 576);
     for (const r of ["SS1", "SS2", "RR", "NS", "FC"]) this.screens[`ro_${r}`] = this._screen(`ui_Readout_${r}`, 256, 96);
     const tiles = [];
     this.root.traverse((o) => { if (/^ui_VideoWall_r\dc\d$/.test(o.name)) tiles.push(o); });
@@ -405,7 +417,8 @@ export class HallWorld {
     const to = new THREE.Vector3(this.pos.x + dx, this.pos.y, this.pos.z + dz);
     if (Math.hypot(to.x, to.z) < SHIELD_CLEAR) return;
     const dir = new THREE.Vector3(dx / len, 0, dz / len);
-    for (const h of [STEP_UP + 0.03, 1.1, 1.75]) {
+    // Knee, hip (so desks and benches block), chest and head.
+    for (const h of [STEP_UP + 0.03, 0.72, 1.1, 1.75]) {
       this.ray.set(new THREE.Vector3(this.pos.x, this.pos.y + h, this.pos.z), dir);
       this.ray.far = len + RADIUS;
       if (this.ray.intersectObjects(this.colliders, false).length) return;
@@ -460,6 +473,7 @@ export class HallWorld {
 
     if (this.screens.left) drawReactorScreen(this.screens.left, s);
     if (this.screens.right) drawPlantScreen(this.screens.right, s, trend);
+    if (this.screens.center) drawMimicScreen(this.screens.center, s);
     for (const r of ["SS1", "SS2", "RR"]) {
       const sc = this.screens[`ro_${r}`];
       if (sc) drawSegment(sc, `${r} ${s.rods[r] ? s.rods[r].position_cm.toFixed(1) : "--.-"}`, "#ffb020");
@@ -548,6 +562,56 @@ function drawReactorScreen(sc, s) {
     g.fillStyle = "#4fc3f7";
     g.fillText("Click to use", W - 260, y);
   }
+}
+
+function drawMimicScreen(sc, s) {
+  // The RTP 3000 operator display: a plan-view mimic of the 4 x 4 core with the rod positions,
+  // the power and period, and the protection-system status. Read only; the controls are on the
+  // left workstation and the hard-wired panel.
+  const { ctx: g, cv } = sc;
+  const h = bg(sc, "RTP 3000 · OPERATOR DISPLAY", s.scrammed ? "#ff6b6b" : "#a5b4fc");
+  const W = cv.width;
+  const cell = h * 1.35, gx = 60, gy = h * 1.6;
+  const rods = { SS1: [3, 3], SS2: [0, 0], RR: [0, 3] };
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      g.fillStyle = "#15202b";
+      g.fillRect(gx + c * cell, gy + r * cell, cell - 6, cell - 6);
+      g.fillStyle = s.true.power_w > 1 ? "#2563eb" : "#1e293b";
+      g.fillRect(gx + c * cell + 8, gy + r * cell + 8, cell - 22, cell - 22);
+    }
+  }
+  g.textBaseline = "middle";
+  g.font = `600 ${h * 0.38}px ${SANS}`;
+  for (const [n, [r, c]] of Object.entries(rods)) {
+    const rod = s.rods[n];
+    const f = rod ? rod.position_cm / rod.travel_cm : 0;
+    g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#f1f5f9";
+    g.fillRect(gx + c * cell + 8, gy + r * cell + 8 + (cell - 22) * f, cell - 22, (cell - 22) * (1 - f));
+    g.fillStyle = "#0b1220";
+    g.fillText(n, gx + c * cell + 14, gy + r * cell + cell / 2 - 3);
+  }
+  g.textBaseline = "alphabetic";
+  g.fillStyle = "#8aa0b4";
+  g.font = `${h * 0.36}px ${SANS}`;
+  g.fillText("CORE PLAN · rods shown as inserted fraction", gx, gy + 4 * cell + h * 0.5);
+  const x = W * 0.52;
+  const row = (label, value, y, color = "#e8f6ff") => {
+    g.fillStyle = "#8aa0b4";
+    g.font = `${h * 0.38}px ${SANS}`;
+    g.fillText(label, x, y);
+    g.fillStyle = color;
+    g.font = `${h * 0.7}px ${MONO}`;
+    g.fillText(value, x, y + h * 0.75);
+  };
+  row("POWER", fmtW(s.true.power_w), h * 1.8);
+  row("PERIOD", fmtP(s.channels.ch2_period_s), h * 3.2);
+  row("POOL", `${s.process.pool_temp_c.toFixed(1)} °C  ${s.process.pool_level_m.toFixed(2)} m`, h * 4.6);
+  const rps = s.protection && s.protection.enabled === false ? "RPS OUT OF SERVICE" : "RPS IN SERVICE";
+  row("PROTECTION", s.scrammed ? "SCRAM" : rps, h * 6.0, s.scrammed ? "#ff3b30" : "#30d158");
+  g.fillStyle = "#8aa0b4";
+  g.font = `${h * 0.36}px ${SANS}`;
+  g.fillText("Read only: use the left workstation to operate", x, h * 8.3);
 }
 
 function drawPlantScreen(sc, s, trend) {

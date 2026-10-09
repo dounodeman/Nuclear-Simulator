@@ -6,9 +6,10 @@ the app asks GitHub for the latest release; when its build number is higher
 than the running one it offers the update, downloads the zipped ``.app``,
 swaps it in place of the running bundle once the app quits, and relaunches.
 
-The repository is private, so the GitHub API needs a token with read access to
-its contents. The user pastes one once in the app; it is kept in a settings
-file readable only by them.
+The repository is public, so no credentials are needed. A GitHub token is
+optional: one pasted in the app (kept in a settings file readable only by the
+user) or set in REACTORSIM_GITHUB_TOKEN is sent when present, which raises the
+API rate limit and keeps updates working if the repository is ever made private.
 """
 
 from __future__ import annotations
@@ -96,7 +97,7 @@ def app_bundle() -> Path | None:
 
 @dataclass
 class UpdateInfo:
-    status: str  # "dev", "no_token", "up_to_date", "available", "error"
+    status: str  # "dev", "up_to_date", "available", "error"
     current: int
     latest: int | None = None
     notes: str = ""
@@ -116,13 +117,16 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _request(url: str, tok: str, accept: str = "application/vnd.github+json") -> urllib.request.Request:
-    return urllib.request.Request(url, headers={
+def _request(url: str, tok: str | None, accept: str = "application/vnd.github+json") -> urllib.request.Request:
+    """GitHub API request; the Authorization header is only sent when a token is configured."""
+    headers = {
         "Accept": accept,
-        "Authorization": f"Bearer {tok}",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "reactorsim-updater",
-    })
+    }
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+    return urllib.request.Request(url, headers=headers)
 
 
 def parse_build(tag: str) -> int | None:
@@ -135,15 +139,15 @@ def check(timeout: float = 10.0) -> UpdateInfo:
     if not is_packaged_app():
         return UpdateInfo("dev", current, message="Running from source: update with git pull.")
     tok = token()
-    if not tok:
-        return UpdateInfo("no_token", current,
-                          message="Add a GitHub token to check for updates (the repository is private).")
     try:
         with urllib.request.urlopen(_request(f"{API}/releases/latest", tok), timeout=timeout) as resp:
             rel = json.load(resp)
     except urllib.error.HTTPError as e:
-        hint = {401: "the token was rejected", 403: "the token lacks access",
-                404: "no release found, or the token cannot see the repository"}.get(e.code, f"HTTP {e.code}")
+        hint = {401: "the token was rejected",
+                403: "GitHub refused the request (rate limit, or the token lacks access)" if tok
+                else "GitHub refused the request (rate limit; add a token to raise it)",
+                404: "no release found" + (", or the token cannot see the repository" if tok else "")}.get(
+                    e.code, f"HTTP {e.code}")
         return UpdateInfo("error", current, message=f"Update check failed: {hint}.")
     except (urllib.error.URLError, OSError, ValueError) as e:
         return UpdateInfo("error", current, message=f"Update check failed: {e}")
@@ -168,7 +172,7 @@ def download(info: UpdateInfo, dest_dir: Path, timeout: float = 120.0) -> Path:
     """Download the release zip. GitHub answers the asset API with a redirect to a signed
     storage URL that must be fetched without the token, so the redirect is followed by hand."""
     tok = token()
-    if not (tok and info.asset_url):
+    if not info.asset_url:
         raise RuntimeError("no update asset to download")
     opener = urllib.request.build_opener(_NoRedirect)
     req = _request(info.asset_url, tok, accept="application/octet-stream")
