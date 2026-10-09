@@ -10,126 +10,160 @@
 </script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
+<!-- The reactor hall, walked in first person -->
+<div id="world" class="world"></div>
+
+<!-- Heads-up display -->
+<div class="hud" id="hud">
+  <div class="hud-top">
     <span class="mark">PUR-1</span>
-    <span class="sub">Purdue University Reactor Number One · 10 kW pool reactor</span>
-  </div>
-  <div class="clock">
-    <span class="label">Plant time</span>
     <span id="clock" class="digits">00:00:00</span>
+    <span id="speedTag" class="speed-tag">1×</span>
   </div>
-  <div class="speed" id="speed" role="group" aria-label="Simulation speed"></div>
-  <div class="actions">
-    <select id="initial" aria-label="Initial state"></select>
-    <button id="restart" class="ghost">Restart</button>
-    <button id="truthToggle" class="ghost" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
-    <button id="instructorToggle" class="ghost" aria-pressed="false">Instructor</button>
-    <button id="updateBtn" class="ghost" title="Updates">Updates</button>
+  <div id="banner" class="banner" hidden></div>
+  <div class="crosshair" id="crosshair"></div>
+  <div class="prompt" id="prompt" hidden></div>
+  <div class="hud-help" id="hudHelp">WASD walk · Shift run · mouse look · click or E to use · Esc menu</div>
+</div>
+
+<!-- Menu: shown at start and on Esc -->
+<div class="menu" id="menu">
+  <div class="menu-card">
+    <div class="menu-title"><span class="mark">PUR-1</span> Purdue University Reactor Number One</div>
+    <p class="menu-lead">You are in the reactor hall. The console with the two workstations, the hard-wired rod
+      drive buttons and the scram button is on the east wall, under the video wall. Walk up to it to operate the reactor.</p>
+    <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
+    <h3>Simulation speed</h3>
+    <div class="speed" id="speed" role="group" aria-label="Simulation speed"></div>
+    <h3>Start over</h3>
+    <div class="form-row">
+      <select id="initial" aria-label="Initial state"></select>
+      <button id="restart" class="ghost">Restart</button>
+    </div>
+    <h3>Tools</h3>
+    <div class="form-row">
+      <button id="truthToggle" class="ghost" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
+      <button id="instructorToggle" class="ghost" aria-pressed="false">Instructor station</button>
+      <button id="updateBtn" class="ghost" title="Updates">Updates</button>
+    </div>
+    <h3>Controls</h3>
+    <table class="keys">
+      <tr><td>W A S D / arrows</td><td>walk</td></tr>
+      <tr><td>Shift</td><td>run</td></tr>
+      <tr><td>Mouse</td><td>look around</td></tr>
+      <tr><td>Click or E</td><td>use the workstation or button in front of you (hold for rod drives)</td></tr>
+      <tr><td>Esc</td><td>leave a workstation, or open this menu</td></tr>
+    </table>
   </div>
-</header>
+</div>
 
-<div id="banner" class="banner" hidden></div>
+<!-- Workstation: reactor control -->
+<section class="station" id="station-reactor" hidden aria-label="Reactor control workstation">
+  <div class="monitor">
+    <div class="monitor-head">
+      <span>REACTOR CONTROL · Workstation 1</span>
+      <button class="ghost" data-close>Step away (Esc)</button>
+    </div>
+    <section class="annunciators" id="annunciators" aria-label="Annunciators"></section>
+    <div class="station-grid reactor">
+      <section class="panel channels" aria-label="Neutron channels">
+        <h2>Nuclear instruments</h2>
+        <div class="channel" id="ch1">
+          <div class="ch-head"><span class="ch-name">CH1 Startup</span><span class="ch-sub">fission chamber</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">cps</span></div>
+          <div class="bar log"><div class="fill"></div><div class="ticks" data-ticks="0.1,1,10,100,1e3,1e4,1e5"></div></div>
+          <div class="period">Period <span class="digits" data-v="period">∞</span></div>
+          <div class="truth" data-v="truth"></div>
+        </div>
+        <div class="channel" id="ch2">
+          <div class="ch-head"><span class="ch-name">CH2 Log power</span><span class="ch-sub">wide range</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">% rated</span></div>
+          <div class="bar log"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="1e-5,1e-4,1e-3,0.01,0.1,1,10,100"></div></div>
+          <div class="period">Period <span class="digits" data-v="period">∞</span></div>
+          <div class="truth" data-v="truth"></div>
+        </div>
+        <div class="channel" id="ch3">
+          <div class="ch-head"><span class="ch-name">CH3 Linear power</span><span class="ch-sub" data-v="range">range</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit" data-v="unit">W</span></div>
+          <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="110"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
+          <div class="range-ctl">
+            <span class="digits small" data-v="pct">0% of range</span>
+            <span class="spacer"></span>
+            <button data-range="down" title="Range down">▼</button>
+            <button data-range="up" title="Range up">▲</button>
+            <button data-range="auto" class="toggle" title="Auto range">Auto</button>
+          </div>
+        </div>
+        <div class="channel" id="ch4">
+          <div class="ch-head"><span class="ch-name">CH4 Safety</span><span class="ch-sub">linear, % rated</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">%</span></div>
+          <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
+        </div>
+      </section>
 
-<section class="annunciators" id="annunciators" aria-label="Annunciators"></section>
+      <section class="panel rods-panel" aria-label="Control rods">
+        <h2>Control rods</h2>
+        <div class="rods" id="rods"></div>
+        <div class="row-ctl"><button id="stopAll" class="ghost">Stop all drives</button></div>
+        <p class="hint" id="interlocks"></p>
+      </section>
 
-<main class="grid">
-  <!-- Nuclear instruments -->
-  <section class="panel channels" aria-label="Neutron channels">
-    <h2>Nuclear instruments</h2>
-    <div class="channel" id="ch1">
-      <div class="ch-head"><span class="ch-name">CH1 Startup</span><span class="ch-sub">fission chamber</span></div>
-      <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">cps</span></div>
-      <div class="bar log"><div class="fill"></div><div class="ticks" data-ticks="0.1,1,10,100,1e3,1e4,1e5"></div></div>
-      <div class="period">Period <span class="digits" data-v="period">∞</span></div>
-      <div class="truth" data-v="truth"></div>
+      <section class="panel aux-panel">
+        <h2>Automatic power control</h2>
+        <div class="servo">
+          <button id="servoBtn" class="toggle">Servo</button>
+          <label>Setpoint <input id="setpoint" type="number" min="0.001" max="12000" step="any" value="10000"> W</label>
+          <button id="setpointBtn" class="ghost">Set</button>
+        </div>
+        <div class="servo-err">Deviation <span class="digits" id="servoErr">-</span></div>
+        <h3>Startup source</h3>
+        <div class="servo">
+          <button id="sourceBtn" class="toggle">Source in</button>
+          <span class="hint" id="sourceHint"></span>
+        </div>
+        <div class="scram-box">
+          <button id="scramBtn" class="scram">SCRAM</button>
+          <button id="resetScram" class="ghost">Reset scram</button>
+        </div>
+      </section>
     </div>
-    <div class="channel" id="ch2">
-      <div class="ch-head"><span class="ch-name">CH2 Log power</span><span class="ch-sub">wide range</span></div>
-      <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">% rated</span></div>
-      <div class="bar log"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="1e-5,1e-4,1e-3,0.01,0.1,1,10,100"></div></div>
-      <div class="period">Period <span class="digits" data-v="period">∞</span></div>
-      <div class="truth" data-v="truth"></div>
-    </div>
-    <div class="channel" id="ch3">
-      <div class="ch-head"><span class="ch-name">CH3 Linear power</span><span class="ch-sub" data-v="range">range</span></div>
-      <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit" data-v="unit">W</span></div>
-      <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="110"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
-      <div class="range-ctl">
-        <span class="digits small" data-v="pct">0% of range</span>
-        <span class="spacer"></span>
-        <button data-range="down" title="Range down">▼</button>
-        <button data-range="up" title="Range up">▲</button>
-        <button data-range="auto" class="toggle" title="Auto range">Auto</button>
-      </div>
-    </div>
-    <div class="channel" id="ch4">
-      <div class="ch-head"><span class="ch-name">CH4 Safety</span><span class="ch-sub">linear, % rated</span></div>
-      <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">%</span></div>
-      <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
-    </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Trend and 3D -->
-  <section class="panel center">
-    <div class="panel-head">
-      <h2>Power history</h2>
-      <div class="seg" id="trendWindow">
-        <button data-w="60">1 min</button><button data-w="600" class="on">10 min</button><button data-w="3600">1 h</button>
-      </div>
+<!-- Workstation: plant data -->
+<section class="station" id="station-plant" hidden aria-label="Plant data workstation">
+  <div class="monitor">
+    <div class="monitor-head">
+      <span>PLANT DATA · Workstation 2</span>
+      <button class="ghost" data-close>Step away (Esc)</button>
     </div>
-    <canvas id="trend" aria-label="Power trend"></canvas>
-    <div class="panel-head">
-      <h2>Reactor</h2>
-      <div class="seg" id="viewSel">
-        <button data-model="pur1_core" class="on">Core</button><button data-model="reactor_hall">Hall</button>
-      </div>
+    <div class="station-grid plant">
+      <section class="panel trend-panel">
+        <div class="panel-head">
+          <h2>Power history</h2>
+          <div class="seg" id="trendWindow">
+            <button data-w="60">1 min</button><button data-w="600" class="on">10 min</button><button data-w="3600">1 h</button>
+          </div>
+        </div>
+        <canvas id="trend" aria-label="Power trend"></canvas>
+      </section>
+      <section class="panel core-panel">
+        <div class="panel-head"><h2>Core camera</h2><span class="hint">drag to orbit</span></div>
+        <div id="view3d" class="view3d"><div class="view-msg">Loading…</div></div>
+      </section>
+      <section class="panel process" aria-label="Process and radiation">
+        <h2>Pool and radiation</h2>
+        <div class="kv" id="process"></div>
+        <h3>Reactivity</h3>
+        <div class="rho" id="rho"></div>
+      </section>
+      <section class="panel log" aria-label="Event log">
+        <h2>Event log</h2>
+        <ol id="events"></ol>
+      </section>
     </div>
-    <div id="view3d" class="view3d"><div class="view-msg">Loading 3D model…</div></div>
-  </section>
-
-  <!-- Rod control -->
-  <section class="panel rods-panel" aria-label="Control rods">
-    <h2>Control rods</h2>
-    <div class="rods" id="rods"></div>
-    <div class="row-ctl">
-      <button id="stopAll" class="ghost">Stop all drives</button>
-    </div>
-    <div class="sub-panel">
-      <h3>Automatic power control</h3>
-      <div class="servo">
-        <button id="servoBtn" class="toggle">Servo</button>
-        <label>Setpoint <input id="setpoint" type="number" min="0.001" max="12000" step="any" value="10000"> W</label>
-        <button id="setpointBtn" class="ghost">Set</button>
-      </div>
-      <div class="servo-err">Deviation <span class="digits" id="servoErr">-</span></div>
-    </div>
-    <div class="sub-panel">
-      <h3>Startup source</h3>
-      <div class="servo">
-        <button id="sourceBtn" class="toggle">Source in</button>
-        <span class="hint" id="sourceHint"></span>
-      </div>
-    </div>
-    <div class="scram-box">
-      <button id="scramBtn" class="scram">SCRAM</button>
-      <button id="resetScram" class="ghost">Reset scram</button>
-    </div>
-  </section>
-
-  <!-- Process -->
-  <section class="panel process" aria-label="Process and radiation">
-    <h2>Pool and radiation</h2>
-    <div class="kv" id="process"></div>
-    <h3>Reactivity</h3>
-    <div class="rho" id="rho"></div>
-  </section>
-
-  <section class="panel log" aria-label="Event log">
-    <div class="panel-head"><h2>Event log</h2><span class="hint" id="interlocks"></span></div>
-    <ol id="events"></ol>
-  </section>
-</main>
+  </div>
+</section>
 
 <aside class="drawer" id="instructor" hidden aria-label="Instructor station">
   <div class="drawer-head"><h2>Instructor station</h2><button class="ghost" id="closeInstructor">Close</button></div>

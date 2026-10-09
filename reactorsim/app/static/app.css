@@ -96,19 +96,8 @@ input[type=number] { width: 90px; font-family: var(--mono); }
 @keyframes flash { 50% { filter: brightness(.55); } }
 
 /* ---------- grid ---------- */
-.grid {
-  display: grid; gap: 12px; padding: 0 16px 16px;
-  grid-template-columns: minmax(260px, 1fr) minmax(420px, 2fr) minmax(300px, 1.1fr);
-  grid-template-areas:
-    "ch center rods"
-    "proc log rods";
-}
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
-.channels { grid-area: ch; }
-.center { grid-area: center; display: flex; flex-direction: column; }
-.rods-panel { grid-area: rods; }
-.process { grid-area: proc; }
-.log { grid-area: log; display: flex; flex-direction: column; }
+.log { display: flex; flex-direction: column; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .panel-head h2 { margin-bottom: 8px; }
 .seg { display: flex; }
@@ -228,14 +217,66 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
 .dlg-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #3b1114; color: #ffd7d7; border: 1px solid #6b1d22; padding: 8px 14px; border-radius: 8px; z-index: 20; max-width: 80vw; }
 
-@media (max-width: 1500px) { .brand .sub { display: none; } }
-@media (max-width: 1180px) {
-  .grid { grid-template-columns: 1fr 1fr; grid-template-areas: "ch rods" "center center" "proc log"; }
-  .annunciators { grid-template-columns: repeat(6, 1fr); }
-  .brand .sub { display: none; }
+/* ======================================================================
+   Walkable hall: the world fills the window; panels live on workstations
+   ====================================================================== */
+html, body { overflow: hidden; }
+.world { position: fixed; inset: 0; background: #0b0f14; }
+.world canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+body.looking .world canvas { cursor: none; }
+
+.hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+.hud-top {
+  position: absolute; top: 12px; left: 14px; display: flex; gap: 12px; align-items: baseline;
+  background: rgba(8, 12, 17, .72); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
 }
-@media (max-width: 760px) {
-  .topbar { flex-wrap: wrap; }
-  .grid { grid-template-columns: 1fr; grid-template-areas: "ch" "rods" "center" "proc" "log"; }
-  .annunciators { grid-template-columns: repeat(3, 1fr); }
+.hud-top .mark, .menu-title .mark { font: 700 16px var(--mono); letter-spacing: .06em; color: var(--accent); }
+.hud-top #clock { font-size: 16px; }
+.speed-tag { font: 12px var(--mono); color: var(--muted); }
+.speed-tag.paused { color: var(--warn); }
+.hud .banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: 60vw; border-radius: 8px; border: 1px solid #6b1d22; }
+.crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(0,0,0,.6); display: none; }
+body.looking .crosshair { display: block; }
+.prompt {
+  position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%);
+  background: rgba(8, 12, 17, .82); border: 1px solid #2a3a4c; border-radius: 6px; padding: 5px 12px;
+  font: 13px var(--sans); color: #e6f6ff; white-space: nowrap;
+}
+.hud-help { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: rgba(215,224,234,.6); font-size: 12px; text-shadow: 0 1px 2px #000; }
+body.at-station .hud-help, body.at-station .crosshair, body.at-station .prompt { display: none; }
+
+.menu { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 12, .62); backdrop-filter: blur(3px); }
+.menu[hidden] { display: none; }
+.menu-card { width: min(560px, 92vw); max-height: 92vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.menu-title { display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
+.menu-lead { color: var(--text); margin: 10px 0 16px; }
+button.primary { background: #12324a; border-color: var(--accent); color: #e6f6ff; font-weight: 600; padding: 10px 18px; font-size: 14px; }
+.menu .speed button { padding: 6px 12px; }
+table.keys { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.keys td { padding: 3px 0; border-bottom: 1px solid #18212c; }
+table.keys td:first-child { font-family: var(--mono); color: var(--accent); width: 38%; }
+
+/* A workstation opens as a monitor in front of the operator. */
+.station { position: fixed; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 9, .55); padding: 2.5vh 2vw; }
+.station[hidden] { display: none; }
+.monitor {
+  width: min(1500px, 100%); max-height: 100%; overflow-y: auto;
+  background: var(--bg); border: 14px solid #08090b; border-radius: 14px;
+  box-shadow: 0 0 0 1px #2a2f36, 0 30px 80px rgba(0,0,0,.7); padding: 10px 12px 14px;
+}
+.monitor-head { display: flex; justify-content: space-between; align-items: center; font: 600 12px var(--mono); letter-spacing: .1em; color: var(--muted); padding: 2px 4px 8px; }
+.monitor .annunciators { padding: 0 0 10px; }
+.station-grid { display: grid; gap: 12px; }
+.station-grid.reactor { grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.1fr) minmax(260px, .9fr); }
+.station-grid.plant { grid-template-columns: 1.4fr 1fr; grid-template-areas: "trend core" "proc log"; }
+.trend-panel { grid-area: trend; }
+.core-panel { grid-area: core; display: flex; flex-direction: column; }
+.station-grid.plant .process { grid-area: proc; }
+.station-grid.plant .log { grid-area: log; }
+.core-panel .view3d { min-height: 230px; }
+.aux-panel h3 { margin-top: 18px; }
+.rods-panel .rod-col { height: 260px; }
+@media (max-width: 1000px) {
+  .station-grid.reactor, .station-grid.plant { grid-template-columns: 1fr; grid-template-areas: none; }
+  .station-grid.plant > * { grid-area: auto; }
 }

@@ -70,6 +70,7 @@ def selftest() -> int:
                 return r.read()
         assert b"PUR-1" in get("/")
         assert get("/vendor/three/three.module.min.js")
+        assert b"HallWorld" in get("/world.js")
         info = json.loads(get("/api/info"))
         time.sleep(1.0)
         state = json.loads(get("/api/state"))

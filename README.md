@@ -49,13 +49,28 @@ print(sim.status()["scram_causes"])      # period and power scrams
 
 ## Control room (Mac app)
 
-![Control room after a scram](docs/img/control_room.png)
+![The console in the reactor hall](docs/img/control_room.png)
 
-A live operator console: the four neutron channels, rod drives you hold to move, the
-servo, the startup source, the scram button, annunciators, a power history, pool and
-radiation readings, an event log and a 3D view of the core whose blades move with the
-rods. An instructor drawer injects experiments, rod and instrument faults, a chiller
-trip, a pool leak and protection-system failures. Plant time runs at 1x to 100x.
+You are an operator standing in the PUR-1 reactor hall. Walk around it in first person
+(WASD, Shift to run, mouse to look), climb the steps to the shield deck and look down into
+the pool, and operate the reactor from the console on the east wall:
+
+- **Workstation 1, reactor control** (right-hand screen): the four neutron channels, rod
+  drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
+  reset, and the annunciators.
+- **Workstation 2, plant data** (left-hand screen): the power history, a core camera, pool and
+  radiation readings, reactivity and the event log.
+- **Hard-wired controls** on the console: hold a rod drive's UP or DOWN button to move it,
+  the red manual scram button, the magnet power switch (scram) and the master key switch
+  (scram reset), plus NS buttons for the startup source. The hallway scram button by the
+  south door works too.
+
+The screens, rod position readouts, annunciator lamps and the 4 x 3 video wall show the live
+plant, and the blades in the core move with the rods. Esc opens a menu with the simulation
+speed (1x to 100x), restart, true plant values and the instructor station, which injects
+experiments, rod and instrument faults, a chiller trip, a pool leak and protection failures.
+
+![Reactor control workstation](docs/img/reactor_workstation.png)
 
 **Install the app.** Every merge to `main` that touches the simulator builds
 `PUR-1 Simulator.app` for Apple silicon and publishes it on the repository's

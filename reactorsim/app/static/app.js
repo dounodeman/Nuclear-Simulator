@@ -1,5 +1,8 @@
 // PUR-1 control room: polls the local simulator session and sends operator commands.
+// The operator walks the reactor hall (world.js); the controls live on the console's two
+// workstations, which open as the station overlays below, and on its hard-wired buttons.
 import { ReactorView } from "./view3d.js";
+import { HallWorld } from "./world.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -10,7 +13,10 @@ let eventsAfter = 0;
 let trendAfter = -1;
 let trend = [];          // [t, power_w, ch2_pct, ch4_pct, peak_fuel_c, pool_c]
 let trendWindow = 600;
-let view = null;
+let view = null;          // core camera on the plant workstation
+let world = null;         // the walkable hall
+let station = null;       // open workstation: "reactor", "plant" or null
+const ann = {};           // annunciator states, shared with the hall's lamps
 
 // ------------------------------------------------------------------ API
 
@@ -156,10 +162,14 @@ function buildStatic() {
   $("#closeInstructor").addEventListener("click", () => toggleDrawer(false));
   buildInstructor();
 
-  $$("#viewSel button").forEach((b) => b.addEventListener("click", () => {
-    $$("#viewSel button").forEach((x) => x.classList.toggle("on", x === b));
-    view?.load(b.dataset.model);
-  }));
+  $$("[data-close]").forEach((b) => b.addEventListener("click", () => closeStation()));
+  $("#enterBtn").addEventListener("click", () => enterHall());
+  document.addEventListener("keydown", (e) => {
+    if (e.code !== "Escape" || $("#updateDlg").open) return;
+    if (station) closeStation();
+    else if (!$("#instructor").hidden) toggleDrawer(false);
+    else if ($("#menu").hidden) showMenu(true);
+  });
 
   $("#updateBtn").addEventListener("click", openUpdates);
   $("#saveToken").addEventListener("click", saveToken);
@@ -252,8 +262,68 @@ function resetBuffers() {
 // ------------------------------------------------------------------ render
 
 function setAnn(key, cls) {
+  ann[key] = cls || null;
   const el = $(`[data-ann="${key}"]`);
   el.className = "ann" + (cls ? ` lit-${cls}` : "");
+}
+
+// ------------------------------------------------------------------ hall, workstations and menu
+
+function showMenu(on) {
+  $("#menu").hidden = !on;
+  if (on) world?.setActive(false);
+  else if (!station) world?.setActive(true);
+}
+
+function enterHall() {
+  showMenu(false);
+  if (!world) return;
+  world.setActive(true);
+  world.lock();
+}
+
+async function openStation(name) {
+  station = name;
+  world?.setActive(false);
+  $("#menu").hidden = true;
+  $("#prompt").hidden = true;
+  $("#station-reactor").hidden = name !== "reactor";
+  $("#station-plant").hidden = name !== "plant";
+  document.body.classList.add("at-station");
+  if (name === "plant") {
+    drawTrend();
+    if (!view && info.models) {
+      try {
+        view = new ReactorView($("#view3d"), "/models/");
+        await view.load("pur1_core");
+        if (state) view.update(state);
+      } catch (e) {
+        $("#view3d").innerHTML = `<div class="view-msg">Core camera unavailable: ${e.message}</div>`;
+      }
+    }
+  }
+}
+
+function closeStation() {
+  if (!station) return;
+  station = null;
+  $("#station-reactor").hidden = true;
+  $("#station-plant").hidden = true;
+  document.body.classList.remove("at-station");
+  if (world) {
+    world.setActive(true);
+    // Pointer lock needs a click; Esc does not count as one.
+    if (!world.dragLook) setPrompt("Click to look around", true);
+  }
+}
+
+let promptTimer = null;
+function setPrompt(text, sticky = false) {
+  const p = $("#prompt");
+  clearTimeout(promptTimer);
+  p.hidden = !text;
+  p.textContent = text || "";
+  if (text && !sticky) promptTimer = setTimeout(() => (p.hidden = true), 2500);
 }
 
 function render() {
@@ -413,6 +483,9 @@ function render() {
   }
 
   view?.update(s);
+  world?.update(s, trend, ann);
+  $("#speedTag").textContent = s.speed === 0 ? "paused" : `${s.speed}×`;
+  $("#speedTag").classList.toggle("paused", s.speed === 0);
 }
 
 function appendEvents(events) {
@@ -434,6 +507,7 @@ function drawTrend() {
   const cv = $("#trend");
   const dpr = window.devicePixelRatio || 1;
   const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return; // workstation closed
   if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   const g = cv.getContext("2d");
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -605,17 +679,39 @@ async function boot() {
   info = await api("/api/info");
   buildStatic();
   await poll();
+  setInterval(poll, 200);
   if (info.models) {
+    world = new HallWorld($("#world"), {
+      use: openStation,
+      command: cmd,
+      prompt: setPrompt,
+      lockChange: (locked, unsupported) => {
+        document.body.classList.toggle("looking", locked);
+        if (unsupported) setPrompt("Drag to look around, click a control to use it");
+        else if (!locked && !station && $("#menu").hidden) showMenu(true);
+      },
+    });
+    window.pur1 = { world };  // handle for debugging from the console
+    $("#enterBtn").textContent = "Loading the hall…";
+    $("#enterBtn").disabled = true;
     try {
-      view = new ReactorView($("#view3d"), "/models/");
-      await view.load("pur1_core");
+      await world.load("/models/reactor_hall.glb");
+      world.setActive(false);
+      $("#enterBtn").textContent = "Enter the hall";
+      $("#enterBtn").disabled = false;
     } catch (e) {
-      $("#view3d").innerHTML = `<div class="view-msg">3D view unavailable: ${e.message}</div>`;
+      world = null;
+      $("#enterBtn").textContent = `Hall unavailable: ${e.message}`;
     }
   } else {
+    $("#enterBtn").textContent = "The 3D hall is not in this install";
     $("#view3d").innerHTML = '<div class="view-msg">3D models are not in this install.</div>';
   }
-  setInterval(poll, 200);
+  if (!world) {
+    // No hall to walk: open the reactor workstation directly so the plant can still be run.
+    $("#enterBtn").disabled = false;
+    $("#enterBtn").onclick = () => openStation("reactor");
+  }
   window.addEventListener("resize", drawTrend);
   if (info.packaged) {
     checkUpdates();
