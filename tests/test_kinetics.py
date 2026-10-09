@@ -47,12 +47,13 @@ def test_negative_period_limit_is_longest_group(pk):
     assert pk.stable_period(-0.05) == pytest.approx(-1 / 0.0124, rel=0.05)
 
 
-def test_scram_gives_minus_80_second_period():
+def test_scram_period_is_set_by_longest_lived_group():
     sim = Simulator()
+    longest = -1 / sim.design.delayed.lam.min()  # about -75 s for the PUR-1 group data
     sim.initialize_at_power(10_000.0)
     sim.scram()
     sim.run(300, dt=0.5)
     p0, t0 = sim.power, sim.t
     sim.run(200, dt=0.5)
     period = (sim.t - t0) / math.log(sim.power / p0)
-    assert -85 < period < -75
+    assert period == pytest.approx(longest, rel=0.05)

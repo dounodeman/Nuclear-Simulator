@@ -27,10 +27,12 @@ DECAY_FRACTION = np.array([
 
 
 class DecayHeat:
-    def __init__(self):
+    def __init__(self, fraction_at_shutdown: float | None = None):
+        """``fraction_at_shutdown`` rescales the curve (e.g. 0.063 from a reactor's safety analysis)."""
         self.lam = DECAY_LAMBDA
-        self.frac = DECAY_FRACTION
-        self.total_fraction = float(DECAY_FRACTION.sum())
+        scale = 1.0 if fraction_at_shutdown is None else fraction_at_shutdown / DECAY_FRACTION.sum()
+        self.frac = DECAY_FRACTION * scale
+        self.total_fraction = float(self.frac.sum())
 
     def equilibrium(self, power: float) -> np.ndarray:
         return self.frac * power

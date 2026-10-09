@@ -53,6 +53,7 @@ class ProtectionSystem:
         self.sp = sp
         self.rated_power = rated_power
         self.enabled = True  # False models a failed RPS (anticipated transient without scram)
+        self.failed_trips: set[str] = set()  # trip families assumed failed: "period", "power", "radiation"
 
     def evaluate(self, r: Readings, rod_drift_cm: float, servo_error: float | None,
                  shutdown: bool) -> ProtectionOutput:
@@ -71,6 +72,8 @@ class ProtectionSystem:
         ch1_period_valid = not r.ch1_saturated
         periods = [("Ch2", r.ch2_period)] + ([("Ch1", r.ch1_period)] if ch1_period_valid else [])
         for name, period in periods:
+            if "period" in self.failed_trips:
+                break
             if _short(period, sp.period_scram_s):
                 out.scram_causes.append(f"{name} period under {sp.period_scram_s:g} s")
             elif _short(period, sp.period_setback_s):
@@ -85,6 +88,8 @@ class ProtectionSystem:
             out.scram_causes.append(f"Ch4 safety power {sp.power_scram_percent:g}%")
         elif r.ch4_percent >= sp.power_setback_percent:
             out.setback_causes.append(f"Ch4 safety power {sp.power_setback_percent:g}%")
+        if r.ch3_percent_of_range <= 0.0:
+            out.setback_causes.append("Ch3 linear at 0% of range")
         if r.ch3_percent_of_range >= sp.linear_scram_percent:
             out.scram_causes.append(f"Ch3 linear {sp.linear_scram_percent:g}% of range")
         elif r.ch3_percent_of_range >= sp.linear_setback_percent:
@@ -95,12 +100,13 @@ class ProtectionSystem:
             out.interlock_causes.append(f"Ch1 under {sp.startup_min_cps:g} cps")
 
         # --- radiation ---
-        if r.rad_pool_top >= sp.pool_top_scram:
-            out.scram_causes.append("Pool top radiation high")
-        if r.rad_console >= sp.console_scram:
-            out.scram_causes.append("Console radiation high")
-        if r.rad_water >= sp.water_scram:
-            out.scram_causes.append("Water process radiation high")
+        if "radiation" not in self.failed_trips:
+            if r.rad_pool_top >= sp.pool_top_scram:
+                out.scram_causes.append("Pool top radiation high")
+            if r.rad_console >= sp.console_scram:
+                out.scram_causes.append("Console radiation high")
+            if r.rad_water >= sp.water_scram:
+                out.scram_causes.append("Water process radiation high")
         if r.rad_air >= sp.air_alarm:
             out.alarms.append("Continuous air monitor high")
 

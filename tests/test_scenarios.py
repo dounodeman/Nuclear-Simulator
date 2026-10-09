@@ -20,6 +20,19 @@ def test_moderate_excursion_is_self_limiting():
     assert s["fuel_damage_fraction"] == 0
 
 
+def test_sar_step_with_scram_benchmark():
+    # SAR 2008/2015 (PARET): peak 46.4 kW at 0.173 s.
+    sim, s = run("sar_step_scram")
+    assert s["peak_power_kw"] == pytest.approx(46.4, rel=0.25)
+    assert s["time_of_peak_s"] == pytest.approx(0.173, abs=0.03)
+    assert s["peak_clad_c"] < 530
+
+
+def test_sar_ramp_with_scram_benchmark():
+    sim, s = run("sar_ramp_scram")
+    assert s["peak_power_kw"] == pytest.approx(18.4, rel=0.1)
+
+
 def test_large_excursion_damages_fuel():
     # SPERT-I's destructive test ($3.3) melted plates; $4 here must exceed the fuel limits.
     sim, s = run("reactivity_accident_large")
@@ -44,7 +57,7 @@ def test_startup_reaches_full_power():
     sim, s = run("startup")
     assert not s["scrammed"]
     assert s["final_power_w"] == pytest.approx(10_000, rel=0.03)
-    assert s["startup_time_s"] < 3600
+    assert s["startup_time_s"] < 3000
 
 
 @pytest.mark.slow

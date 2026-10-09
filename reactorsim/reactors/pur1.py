@@ -4,8 +4,10 @@ A 10 kW (12 kW licensed) light-water pool reactor with MTR-type 19.75% U3Si2-Al
 plate fuel, graphite reflector, two borated-steel shim-safety blades, one
 stainless regulating rod and an all-digital safety and control system.
 
-Sources and the status of every value (sourced, derived or assumed) are listed
-in docs/pur1_reference.md.
+Values follow the project's PUR-1 Simulator Parameter Sheet and Reference
+Compendium (SAR 2008/2015, conversion SAR 2006, Technical Specifications, FRS,
+and the 2026 digital twin paper). Sources and the status of every value
+(sourced, derived or assumed) are listed in docs/pur1_reference.md.
 """
 
 from __future__ import annotations
@@ -19,15 +21,24 @@ from reactorsim.plant.rods import RodSpec
 from reactorsim.reactors.base import ReactorDesign
 
 RATED_W = 10_000.0
-CORE_HEIGHT_CM = 61.0
+CORE_HEIGHT_CM = 61.0  # active fuel length 60.0-61.0 cm
+ROD_TRAVEL_CM = 64.12  # full drive stroke (RR upper limit)
+# Absorber travel below the active core. Chosen so the banked critical height of the fresh
+# LEU core is the measured ~53.5 cm with the measured worths and excess reactivity.
+ROD_OFFSET_CM = 5.9
 
 # Half-decade linear ranges, 1 mW to 31.6 kW full scale (16 ranges).
 LINEAR_RANGES = tuple(1e-3 * 10 ** (k / 2) for k in range(16))
 
-# Core-average flux and cross sections. 1.2e10 n/cm2-s average thermal flux at 1 kW (sourced),
-# core volume about 30 x 30 x 61 cm. Sigma_f follows from P = E_f * Sigma_f * phi * V.
+# Core-average flux and cross sections. 1.38e10 n/cm2-s average thermal flux at 1 kW (SAR 2008 MCNP),
+# core volume about 4 x 7.6 cm pitch square by 61 cm. Sigma_f follows from P = E_f * Sigma_f * phi * V.
 CORE_VOLUME_CM3 = 30.5 * 30.5 * CORE_HEIGHT_CM
-FLUX_PER_WATT = 1.2e10 / 1000.0
+FLUX_PER_WATT = 1.38e10 / 1000.0
+
+# Six-group delayed neutron data for the PUR-1 LEU core (OpenMC, Theos et al. 2026, Table VI),
+# rescaled to the SAR 2008 beta-effective of 0.00784.
+GROUP_BETA = (2.6141e-4, 1.3439e-3, 1.3137e-3, 2.9103e-3, 1.1985e-3, 5.0087e-4)
+GROUP_LAMBDA = (1.3337e-2, 3.2732e-2, 1.2080e-1, 3.0295e-1, 8.5024e-1, 2.8555)
 SIGMA_F = 1.0 / (3.204e-11 * FLUX_PER_WATT * CORE_VOLUME_CM3)
 SIGMA_A = 2.43 * SIGMA_F / 1.4  # nu * Sigma_f / k_inf, k_inf about 1.4 for a small MTR core
 
@@ -37,30 +48,34 @@ DESIGN = ReactorDesign(
     description="10 kW open-pool MTR research reactor with all-digital I&C",
     rated_power=RATED_W,
     licensed_power=12_000.0,
-    delayed=DelayedNeutronData.u235_thermal(beta_eff=0.0076),
-    generation_time=5.4e-5,
-    excess_reactivity=0.0055,
+    delayed=DelayedNeutronData.from_groups(GROUP_BETA, GROUP_LAMBDA, beta_eff=0.00784),
+    generation_time=81.3e-6,  # SAR 2008 prompt neutron lifetime for the LEU core
+    excess_reactivity=0.0042,  # measured, fresh LEU core, cold clean
     rods=(
-        RodSpec("SS1", worth=0.029, length_cm=CORE_HEIGHT_CM, speed_cm_s=11.0 / 60, scrammable=True, drop_time_s=0.6),
-        RodSpec("SS2", worth=0.029, length_cm=CORE_HEIGHT_CM, speed_cm_s=11.0 / 60, scrammable=True, drop_time_s=0.6),
-        RodSpec("RR", worth=0.0047, length_cm=CORE_HEIGHT_CM, speed_cm_s=43.5 / 60, scrammable=False),
+        RodSpec("SS1", worth=0.0393, length_cm=ROD_TRAVEL_CM, active_cm=CORE_HEIGHT_CM, offset_cm=ROD_OFFSET_CM,
+                speed_cm_s=11.0 / 60, scrammable=True, drop_time_s=0.6),
+        RodSpec("SS2", worth=0.0222, length_cm=ROD_TRAVEL_CM, active_cm=CORE_HEIGHT_CM, offset_cm=ROD_OFFSET_CM,
+                speed_cm_s=11.0 / 60, scrammable=True, drop_time_s=0.6),
+        RodSpec("RR", worth=0.0027, length_cm=ROD_TRAVEL_CM, active_cm=CORE_HEIGHT_CM, offset_cm=ROD_OFFSET_CM,
+                speed_cm_s=43.5 / 60, scrammable=False),
     ),
     shim_rods=("SS1", "SS2"),
     regulating_rod="RR",
-    alpha_fuel=-0.2e-4,
-    alpha_moderator=-1.7e-4,
-    alpha_void=-2.0e-3,
+    # SAR 2008 low-temperature values, then the conversion SAR bands at higher temperature.
+    fuel_coefficient=((127.0, -8.05e-6), (227.0, -1.387e-5), (1e9, -8.40e-6)),
+    moderator_coefficient=((30.0, -9.05e-5), (60.0, -1.075e-4), (1e9, -1.229e-4)),
+    alpha_void=-1.93e-3,
     reference_temp=20.0,
     thermal=ThermalParams(
-        fuel_heat_capacity=31_500.0,
-        core_water_mass=33.0,
+        fuel_heat_capacity=27_000.0,  # 190 plates x 70.2 x 1.27 x 638.6 mm, Al-U3Si2 about 2.4 MJ/m3-K
+        core_water_mass=34.0,  # 532.6 cm2 flow area x 63.8 cm
         pool_water_mass=24_200.0,
-        plate_conductance=8_700.0,
-        natcirc_flow_rated=1.0,
+        plate_conductance=4_800.0,  # 13.6 m2 of meat-backed surface at about 350 W/m2-K
+        natcirc_flow_rated=0.92,  # 985 cm3/s at 12 kW, scaled to 10 kW
         rated_power=RATED_W,
         natcirc_min_flow=0.05,
         gamma_heat_fraction=0.03,
-        hot_spot_factor=2.0,
+        hot_spot_factor=3.8,  # plate peaking 2.6 x hot channel 1.5; gives ~43 C clad at 18 kW
         core_height_m=CORE_HEIGHT_CM / 100,
         pool_loss_ua=35.0,
         pool_loss_ref_temp=5.0,
@@ -75,7 +90,7 @@ DESIGN = ReactorDesign(
     sigma_a=SIGMA_A,
     u235_mass_g=2650.0,
     burnup_reactivity_per_fraction=0.3,
-    source_strength=1.05,
+    source_strength=1.05,  # 5 Ci Pu-Be
     intrinsic_source=1e-4,
     instruments=InstrumentParams(
         rated_power=RATED_W,
@@ -103,24 +118,29 @@ DESIGN = ReactorDesign(
         water_scram=7.5,
         air_alarm=1.0,
         pool_temp_alarm=29.7,
-        pool_level_alarm_m=3.96,  # 13 ft minimum above the core
+        pool_level_alarm_m=3.96,  # TS: 13 ft minimum above the core
         servo_deviation_alarm=0.05,
         rod_drift_setback_cm=3.0,
         shim_interlock_height_cm=6.0,
     ),
     radiation=RadiationParams(
         rated_power=RATED_W,
-        pool_top_full_power=10.0,
+        pool_top_full_power=8.0,  # under 1 mrem/h at 1 kW (SAR)
         console_full_power=0.5,
         water_full_power=1.0,
-        normal_level_m=4.3,
+        normal_level_m=4.1,
         attenuation_per_m=3.0,
         release_mr_per_damage=5_000.0,
         release_half_life_s=8 * 3600.0,
         air_fraction=0.01,
     ),
     chiller_setpoints=(18.3, 23.9),
-    initial_pool_temp=21.0,
-    normal_level_m=4.3,
+    initial_pool_temp=22.0,
+    normal_level_m=4.1,
     fuel_limits={"safety_limit": 530.0, "blister": 550.0, "melt": 582.0},
+    decay_heat_at_shutdown=0.063,
+    scram_delay_s=0.1,
+    one_rod_withdrawal=True,
+    setback_drives_all_rods=True,  # setback is a gang lower of all rods at normal speed
+    scram_drives_regulating_rod_in=False,  # RR stays put on a scram
 )

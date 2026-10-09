@@ -1,78 +1,82 @@
 # PUR-1 reference data
 
-Values the engine uses for PUR-1 (`reactorsim/reactors/pur1.py`), tagged by where they come from:
-**Sourced** (NRC filing or Purdue), **Derived** (computed from sourced values) or **Assumed**
-(typical for this reactor class, to be replaced when better data is found).
+The engine's PUR-1 values (`reactorsim/reactors/pur1.py`) follow the project's
+**PUR-1 Simulator Parameter Sheet** and **PUR-1 Reference Compendium** (in the project
+Google Drive, PUR-1 folder), which cite the licensing record: SAR 2008 (ML111890201),
+SAR 2015 (ML15210A283), HEU-to-LEU conversion SAR 2006 (ML070920272), Technical
+Specifications 2016 (ML16267A001) and Amendment 14 (ML18275A124), the digital I&C
+specification PUR1-FRS-001 (ML17172A638), RAI responses (ML13101A044), and Theos et al.,
+"The PUR-1 Cyber-Physical Digital Twin" (arXiv 2608.30186).
 
-## Plant
+Tags: **Sourced** (value taken from those documents), **Derived** (computed from sourced
+values), **Assumed** (not published; typical for this class of reactor).
 
-| Item | Value | Tag |
+## Kinetics and reactivity
+
+| Parameter | Engine value | Tag |
 | --- | --- | --- |
-| Power | 10 kW normal, 12 kW licensed maximum (license R-87) | Sourced |
-| Fuel | 19.75% U3Si2-Al MTR plates (BWXT), 6061-T6 Al clad 0.381 mm | Sourced |
-| Core | 13 standard (up to 14 plates, 180 g U-235) + 3 control assemblies (up to 8 plates, 103 g); about 1 x 1 x 2 ft | Sourced |
-| Reflector | 20 graphite assemblies, 6 used as irradiation positions | Sourced |
-| Pool | 8 ft dia, 17 ft deep, 6,400 gal; at least 13 ft over the core; 30 C limit | Sourced |
-| Chiller | 36,000 Btu/h (10.5 kW), control band 18.3-23.9 C | Sourced |
-| Fuel safety limit | 530 C; blistering about 550 C; clad melting about 582 C | Sourced |
-| Shim-safety rods | 2 x borated 304 SS, 5.8% dk/k together, 11 cm/min, drop under 1 s | Sourced |
-| Regulating rod | hollow 304 SS, 0.47% dk/k, 43.5 cm/min, not scrammable | Sourced |
-| Excess reactivity limit | 0.006 dk/k | Sourced |
-| Shutdown margin | at least 0.010 dk/k with most reactive shim and reg rod out | Sourced |
-| Temperature coefficient | -1.9e-4 dk/k per C at 20 C | Sourced |
-| Neutron lifetime | 5.4e-5 s | Sourced |
-| Average / peak thermal flux | 1.2e10 / 2.1e10 n/cm2-s at 1 kW | Sourced |
+| Beta-effective | 0.00784 | Sourced (SAR 2008) |
+| Six delayed groups | OpenMC lambda and beta (digital twin paper, Table VI), scaled to 0.00784 | Sourced |
+| Prompt neutron lifetime (used as generation time) | 81.3 us | Sourced (SAR 2008) |
+| Excess reactivity, fresh core, cold clean | 0.0042 dk/k (TS max 0.006) | Sourced (measured) |
+| Shutdown margin, SS1 and RR out | 0.018 dk/k (TS min 0.010) | Sourced (measured) |
+| Rod worths SS1 / SS2 / RR | 0.0393 / 0.0222 / 0.0027 dk/k | Sourced (measured) |
+| Rod speeds | shims 11 cm/min, RR 43.5 cm/min | Sourced |
+| Rod travel, active span, dead travel | 64.12 cm, 61 cm, 5.9 cm | Sourced / Sourced / Derived (gives banked critical at ~53.5 cm) |
+| Scram | 0.1 s signal delay, about 0.6 s fall, under 1 s total | Sourced (TS, analysis) / Assumed fall |
+| Moderator temperature coefficient | -9.05e-5 per C to 30 C, -1.075e-4 to 60 C, -1.229e-4 above | Sourced (SAR 2008, conversion SAR) |
+| Fuel temperature coefficient | -8.05e-6 per C to 127 C, -1.387e-5 to 227 C, -8.40e-6 above | Sourced |
+| Void coefficient | -1.93e-3 dk/k per % void | Sourced (valid 0-0.6% void) |
+| Average thermal flux | 1.38e10 n/cm2-s per kW | Sourced (SAR 2008 MCNP) |
+| Decay heat | 6.3% at shutdown, Way-Wigner shape | Sourced |
 
-## Protection setpoints (digital RPS)
+## Thermal hydraulics
+
+| Parameter | Engine value | Tag |
+| --- | --- | --- |
+| Pool | 24.2 m3, 4.1 m of water over the core, 22 C start (27 C for licensing benchmarks) | Sourced |
+| Chiller | 10.55 kW, on above 23.9 C, off below 18.3 C | Sourced |
+| Core flow | 0.92 kg/s at 10 kW (985 cm3/s at 12 kW), scaled with power^(1/3) | Sourced / Derived |
+| Plate heat capacity | 27 kJ/K (190 fueled plates) | Derived |
+| Plate-to-water conductance | 4.8 kW/K (13.6 m2 at about 350 W/m2-K) | Assumed, tuned to NATCON clad temperatures |
+| Hot-spot factor | 3.8 (plate peaking 2.6 x hot channel 1.5) | Derived |
+| Boiling void | 0.01 per C of wall superheat, reduced by bulk subcooling, 20 ms | Assumed |
+| Critical heat flux | 30 C wall superheat; film boiling conductance 0.3x | Assumed |
+| Fuel limits | 530 C safety limit, 550 C blistering, 582 C clad melting | Sourced |
+
+## Protection and control (digital I&C)
 
 | Condition | Action | Tag |
 | --- | --- | --- |
 | Period under 7 s (Ch1, Ch2) | Scram | Sourced |
-| Period 12 s or less | Setback | Sourced |
+| Period 12 s or less | Setback: gang lower of all rods at normal speed | Sourced |
 | Period 15 s or less, or Ch1 under 2 cps | Rod withdrawal interlock | Sourced |
-| 120% power (Ch2, Ch3 of range, Ch4) | Scram | Sourced |
-| 110% power (Ch3 of range, Ch4) | Setback | Sourced |
+| Ch2 / Ch4 at 120% (12 kW); Ch3 at 120% of range | Scram | Sourced |
+| Ch4 at 110% (11 kW); Ch3 at 110% of range or at 0% | Setback | Sourced |
 | Ch2 high voltage lost | Scram | Sourced |
 | Pool top 50 mR/h; console or water process 7.5 mR/h | Scram | Sourced |
-| Rod drive drift over 3 cm after stop | Setback | Sourced |
-| Pool over 29.7 C | Alarm | Sourced |
-| Pool level under 13 ft above core | Alarm | Assumed (from the TS minimum) |
+| More than one rod withdrawing | Blocked (one rod at a time) | Sourced |
+| Scram | Shim magnets released; RR stays where it is | Sourced |
+| Servo deviation over 5% | Alarm | Sourced |
 
-## Engine parameters that are not published
+## Benchmarks against the licensing analyses
 
-| Parameter | Engine value | Tag |
+| Case | Licensing result | Simulator |
 | --- | --- | --- |
-| Beta-effective | 0.0076 with Keepin U-235 group shape | Assumed |
-| Excess reactivity, cold clean | +0.0055 dk/k | Assumed (under the 0.006 limit) |
-| Shim worth split | 0.029 dk/k each | Derived |
-| Fuel / moderator coefficient split | -0.2e-4 / -1.7e-4 per C | Assumed |
-| Void coefficient | -2e-3 dk/k per % void | Assumed |
-| Plate heat capacity | 31.5 kJ/K | Derived |
-| Plate-to-water conductance | 8.7 kW/K (17 m2 at 500 W/m2-K) | Assumed |
-| Natural circulation | 1.0 kg/s at 10 kW, scaled by power^(1/3) | Assumed |
-| Hot-spot factor | 2.0 | Assumed |
-| Boiling void | 0.01 per C of wall superheat, cut by subcooling (e-fold 40 C), 20 ms time constant | Assumed, tuned to SPERT-I burst data |
-| Critical heat flux | at 30 C wall superheat, film boiling conductance 0.3x | Assumed |
-| U-235 in core | 2,650 g | Derived (upper bound) |
-| Burnup reactivity | -0.3 dk/k per unit fractional U-235 loss | Assumed |
-| Startup source | about 1 mW subcritical with all rods in | Assumed |
-| Startup channel calibration | 2e4 cps per W | Derived |
-| Radiation at full power | pool top 10, console 0.5, water 1.0 mR/h | Assumed |
+| 0.6% step from 12 kW, period trip failed, scram at 18 kW actual, SS2 only | 46.4 kW at 0.173 s, clad 57.4 C | 55 kW at 0.172 s, clad 40.5 C |
+| 0.6% over 10 s, same assumptions | 18.4 kW, clad 57.5 C | 18.4 kW, clad 40.1 C |
+| 0.6% step from 10 kW, no scram | 2.39 MW at about 680 s, clad 133 C | 645 kW at 3 s, then about 210 kW held by boiling voids; clad 120 C |
+| Hot clad at 18 kW steady | about 43 C | 44.7 C |
+| Pool heat-up at 10 kW, chiller off | about 0.36 C/h | 0.33 C/h (room losses included) |
 
-## Open questions
+The scram-terminated peaks and timing match well. Peak clad temperatures in the fast
+transients come out lower than PARET's, which uses hot-channel factors on top of a
+conservative starting state. The unscrammed case differs most: here subcooled-boiling
+voids cap the power within seconds, while PARET's power keeps rising for minutes. These
+are the main items left to calibrate.
 
-- Measured beta-effective and rod worth curves for the LEU core.
-- Exact core map and as-loaded plate counts.
-- Measured split of fuel and moderator temperature coefficients.
+## Still open
+
+- Measured integral rod worth curves (the engine uses an S-curve fitted to the banked critical height).
+- Plate-to-water heat transfer and boiling-void parameters under transient conditions.
 - Full-power radiation monitor readings.
-
-## Sources
-
-- [NRC ML14136A083: license renewal and Technical Specifications](https://www.nrc.gov/docs/ML1413/ML14136A083.pdf)
-- [NRC ML17172A638: digital I&C functional requirements, PUR1-FRS-001](https://www.nrc.gov/docs/ML1717/ML17172A638.pdf)
-- [NRC ML15329A289: safety analysis excerpt](https://www.nrc.gov/docs/ML1532/ML15329A289.pdf)
-- [NRC ML16267A466: emergency plan](https://www.nrc.gov/docs/ML1626/ML16267A466.pdf)
-- [NRC ML20065R492: operator licensing exam](https://www.nrc.gov/docs/ML2006/ML20065R492.pdf)
-- [Purdue NE: PUR-1](https://engineering.purdue.edu/NE/research/facilities/reactor)
-- [Wikipedia: Purdue University Reactor Number One](https://en.wikipedia.org/wiki/Purdue_University_Reactor_Number_One)
-- [POWER: remote automated power control at PUR-1](https://powermag.com/purdue-nuclear-reactor-test-demonstrates-remote-automated-power-control)

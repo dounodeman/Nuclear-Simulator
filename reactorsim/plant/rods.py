@@ -25,10 +25,16 @@ def integral_worth_fraction(x: float, length: float) -> float:
 class RodSpec:
     name: str
     worth: float  # total worth, dk/k (positive number)
-    length_cm: float
+    length_cm: float  # full travel of the drive
     speed_cm_s: float
     scrammable: bool
     drop_time_s: float = 0.6
+    active_cm: float | None = None  # span over which the worth curve rises (defaults to full travel)
+    offset_cm: float = 0.0  # travel before the absorber starts leaving the active core
+
+    def worth_fraction_removed(self, x: float) -> float:
+        span = self.active_cm or self.length_cm
+        return integral_worth_fraction(x - self.offset_cm, span)
 
 
 @dataclass
@@ -51,12 +57,14 @@ class Rod:
 
     def inserted_worth(self) -> float:
         """Negative reactivity this rod currently holds in the core."""
-        return self.spec.worth * (1.0 - integral_worth_fraction(self.position, self.spec.length_cm))
+        return self.spec.worth * (1.0 - self.spec.worth_fraction_removed(self.position))
 
     def differential_worth(self) -> float:
         """d(rho)/dx in dk/k per cm at the current position."""
-        L = self.spec.length_cm
-        z = min(max(self.position / L, 0.0), 1.0)
+        L = self.spec.active_cm or self.spec.length_cm
+        z = (self.position - self.spec.offset_cm) / L
+        if not 0.0 <= z <= 1.0:
+            return 0.0
         return self.spec.worth * (1 - math.cos(2 * math.pi * z)) / L
 
     def release(self) -> None:

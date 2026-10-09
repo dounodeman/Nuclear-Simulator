@@ -27,7 +27,7 @@ from reactorsim.plant.protection import ProtectionOutput, ProtectionSystem
 from reactorsim.plant.radiation import RadiationModel
 from reactorsim.plant.rods import Rod
 from reactorsim.reactors import get_design
-from reactorsim.reactors.base import ReactorDesign
+from reactorsim.reactors.base import ReactorDesign, temperature_reactivity
 
 
 @dataclass
@@ -68,7 +68,7 @@ class Simulator:
         self.control_dt = control_dt
         self.max_substep = max_substep
         self.kinetics = PointKinetics(d.delayed, d.generation_time)
-        self.decay = DecayHeat()
+        self.decay = DecayHeat(d.decay_heat_at_shutdown)
         self.thermal_model = PoolThermal(d.thermal)
         self.poison_model = Poisons(d.sigma_f, d.sigma_a)
         self.burnup_model = Burnup(d.u235_mass_g, d.burnup_reactivity_per_fraction)
@@ -100,6 +100,7 @@ class Simulator:
         self.decay_groups = np.zeros_like(self.decay.frac)
 
         self.scrammed = False
+        self._pending_release: float | None = None  # time the magnets drop after a scram signal
         self.scram_causes: list[str] = []
         self.setback_active = False
         self.setback_count = 0
@@ -132,8 +133,8 @@ class Simulator:
         parts = {
             "excess": d.excess_reactivity,
             "rods": -sum(r.inserted_worth() for r in self.rods.values()),
-            "fuel_temp": d.alpha_fuel * (th.fuel_temp - d.reference_temp),
-            "moderator_temp": d.alpha_moderator * (th.core_temp - d.reference_temp),
+            "fuel_temp": temperature_reactivity(th.fuel_temp, d.reference_temp, d.fuel_coefficient),
+            "moderator_temp": temperature_reactivity(th.core_temp, d.reference_temp, d.moderator_coefficient),
             "void": d.alpha_void * void_pct,
             "xenon": self.poison_model.xenon_worth(self.poisons),
             "samarium": self.poison_model.samarium_worth(self.poisons),
@@ -257,15 +258,17 @@ class Simulator:
             self._event("setback", "Setback: " + "; ".join(out.setback_causes))
             self.setback_count += 1
             self.servo.enabled = False
+        setback_rods = list(d.shim_rods) + ([d.regulating_rod] if d.setback_drives_all_rods else [])
         if setback:
-            for name in d.shim_rods:
+            for name in setback_rods:
                 self.rods[name].target = None
                 self.rods[name].command = -1
-            self.rods[d.regulating_rod].target = None
-            self.rods[d.regulating_rod].command = 0
+            if not d.setback_drives_all_rods:
+                self.rods[d.regulating_rod].target = None
+                self.rods[d.regulating_rod].command = 0
 
         if self.setback_active and not setback:
-            for name in d.shim_rods:
+            for name in setback_rods:
                 self.rods[name].command = 0
         self.setback_active = setback
 
@@ -288,10 +291,16 @@ class Simulator:
 
         # Rod withdrawal interlocks.
         blocked = bool(out.interlock_causes) or self.scrammed
+        withdrawing: list[str] = []
         for name, rod in self.rods.items():
             wants_out = rod.command == 1 or (rod.target is not None and rod.target > rod.drive_position)
             if not wants_out:
                 continue
+            if d.one_rod_withdrawal and withdrawing:
+                rod.command = 0
+                rod.target = None
+                continue
+            withdrawing.append(name)
             shim_limit = (name in d.shim_rods and not out.channels_operable
                           and rod.drive_position >= d.protection.shim_interlock_height_cm)
             if blocked or shim_limit:
@@ -313,8 +322,20 @@ class Simulator:
         """Advance one control cycle (or ``dt`` seconds, treated as one cycle)."""
         dt = self.control_dt if dt is None else dt
         self._control()
-        self._physics(dt)
+        if self._pending_release is not None and self._pending_release < self.t + dt:
+            first = max(self._pending_release - self.t, 0.0)
+            if first > 0:
+                self._physics(first)
+            self._release_rods()
+            self._physics(dt - first)
+        else:
+            self._physics(dt)
         self._sample_instruments(dt)
+
+    def _release_rods(self) -> None:
+        self._pending_release = None
+        for r in self.rods.values():
+            r.release()
 
     def run(self, duration: float, dt: float | None = None, record_every: float | None = None,
             until: Callable[["Simulator"], bool] | None = None,
@@ -357,14 +378,22 @@ class Simulator:
         causes = [cause] if isinstance(cause, str) else list(cause)
         if not self.scrammed:
             self._event("scram", "SCRAM: " + "; ".join(causes))
+        first = not self.scrammed
         self.scrammed = True
         self.scram_causes = causes
         self.servo.enabled = False
         for r in self.rods.values():
             r.target = None
             r.command = 0
-            r.release()
-        self.rods[self.design.regulating_rod].command = -1
+            if r.spec.scrammable:
+                r.magnet_power = False  # blocks re-latching while the scram is in effect
+        if self.design.scram_drives_regulating_rod_in:
+            self.rods[self.design.regulating_rod].command = -1
+        if first:
+            if self.design.scram_delay_s > 0:
+                self._pending_release = self.t + self.design.scram_delay_s
+            else:
+                self._release_rods()
 
     def reset_scram(self) -> bool:
         """Clear a scram if no trip condition remains. Drives must then be run in to re-latch."""
@@ -414,7 +443,8 @@ class Simulator:
         """Put the reactor at steady critical power with rods at their critical heights.
 
         ``xenon`` is "clean" (no poisons) or "equilibrium" (long run at this power).
-        The shims are moved together to the height that makes the core critical.
+        With no ``reg_position_cm`` all rods are banked at the critical height; otherwise the
+        regulating rod is set there and the shims are moved together to criticality.
         """
         d = self.design
         self.source_inserted = False
@@ -436,15 +466,18 @@ class Simulator:
         self.thermal = ThermalState(tf, tc, tp)
 
         reg = self.rods[d.regulating_rod]
-        reg_pos = reg.spec.length_cm / 2 if reg_position_cm is None else reg_position_cm
-        reg.position = reg.drive_position = reg_pos
+        banked = reg_position_cm is None
+        if not banked:
+            reg.position = reg.drive_position = reg_position_cm
+        moving = list(d.shim_rods) + ([d.regulating_rod] if banked else [])
 
         def rho_at(x):
-            for n in d.shim_rods:
-                self.rods[n].position = self.rods[n].drive_position = x
+            for n in moving:
+                rod = self.rods[n]
+                rod.position = rod.drive_position = min(x, rod.spec.length_cm)
             return self.reactivity()["total"]
 
-        L = self.rods[d.shim_rods[0]].spec.length_cm
+        L = min(self.rods[n].spec.length_cm for n in moving)
         if rho_at(L) < 0:
             raise ValueError("core cannot be made critical at this power and xenon state")
         rho_at(brentq(rho_at, 0.0, L, xtol=1e-9))

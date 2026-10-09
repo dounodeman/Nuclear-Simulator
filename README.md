@@ -14,17 +14,18 @@ It is the test bed: a small, well-documented core whose digital controls can be 
 
 | Area | Model |
 | --- | --- |
-| Neutron kinetics | Point kinetics, 6 delayed groups (Keepin U-235), Pu-Be startup source; advanced exactly with a matrix exponential, so prompt-critical bursts are stable and accurate |
+| Neutron kinetics | Point kinetics, PUR-1's own 6 delayed groups, Pu-Be startup source; advanced exactly with a matrix exponential, so prompt-critical bursts are stable and accurate |
 | Feedback | Fuel (Doppler), moderator temperature, and void from subcooled and bulk boiling |
 | Thermal hydraulics | Fuel plates, core channel water and pool as heat-capacity nodes; natural circulation; boiling curve with critical heat flux and film boiling; chiller with thermostat; pool draining below the core |
 | Poisons and fuel | I-135/Xe-135 and Pm-149/Sm-149 chains; U-235 depletion; 17-group decay heat |
 | Control rods | S-shaped worth curves, motor drive speeds, electromagnet gravity scram, re-latching after a scram, stuck and runaway drive faults |
 | Instruments | PUR-1's four neutron channels (startup fission chamber, log-N, linear with 16 ranges, safety), period meters, counting noise, radiation monitors; fault modes: fail low/high, stuck, gain error, drift, HV loss |
-| Protection and control | Scrams, setbacks and withdrawal interlocks at PUR-1's setpoints; regulating-rod power servo; a failed-RPS mode for beyond-design accidents |
+| Protection and control | Scrams, gang-lower setbacks, withdrawal interlocks (including one rod at a time) at PUR-1's setpoints; regulating-rod power servo; failed-trip and failed-RPS modes for licensing and beyond-design accidents |
 | Consequences | Fuel safety limit, cladding blistering and melting, fission-product release into the pool, dose rates as shielding water is lost |
 
 Every PUR-1 number, where it came from, and which ones are still assumptions are in
-[docs/pur1_reference.md](docs/pur1_reference.md).
+[docs/pur1_reference.md](docs/pur1_reference.md). The values follow the project's PUR-1
+Simulator Parameter Sheet (SAR 2008/2015, Technical Specifications, digital twin paper).
 
 ## Quick start
 
@@ -32,7 +33,7 @@ Every PUR-1 number, where it came from, and which ones are still assumptions are
 pip install -e .[dev]
 python -m reactorsim list
 python -m reactorsim run startup --plot startup.png
-python -m pytest            # 28 validation tests
+python -m pytest            # 32 validation tests
 ```
 
 ```python
@@ -50,28 +51,36 @@ print(sim.status()["scram_causes"])      # period and power scrams
 
 | Scenario | What happens |
 | --- | --- |
-| `startup` | Cold shutdown to 10 kW following the startup procedure (about 33 minutes) |
-| `scram` | Scram from 10 kW: prompt drop, then the textbook -80 s period |
+| `startup` | Cold shutdown to 10 kW following the startup procedure, one rod at a time (about 37 minutes) |
+| `scram` | Scram from 10 kW: prompt drop, then the stable negative period (about -75 s) |
 | `xenon` | 40 h at power, then shutdown; shows why xenon barely matters at 10 kW |
 | `experiment` | A 0.003 dk/k experiment inserted at full power |
 | `rod_withdrawal` / `rod_withdrawal_atws` | A shim drive runs away, with and without protection |
 | `reactivity_accident` / `reactivity_accident_large` | Hypothetical $1.50 and $4.00 step insertions with the RPS failed |
-| `loss_of_chiller` | Pool heats about 0.33 C/h at 10 kW; temperature alarm after about 27 h |
+| `loss_of_chiller` | Pool heats about 0.33 C/h at 10 kW; temperature alarm after about 24 h |
 | `loss_of_pool_water` | A pool leak: radiation monitors scram the reactor, then the core is uncovered |
 | `calibration_error` | Recreates the 2019-2020 event where new instruments read 3x low |
-| `linear_channel_failure` | The servo's channel fails; the safety channel has to catch the rise |
+| `linear_channel_failure` | The servo's channel reads half of true power; the safety channel has to catch the rise |
+| `sar_step_scram`, `sar_ramp_scram`, `sar_step_no_scram` | The licensing-basis 0.6% dk/k insertions from the SAR, for benchmarking |
 
 ## Validation so far
 
-| Check | Expected | Simulator |
+| Check | Reference | Simulator |
 | --- | --- | --- |
-| Period after scram | about -80 s (longest delayed group) | -80.1 s |
+| Period after scram | -1/lambda_1 = -75 s for PUR-1's group data | -75 s |
 | Stable periods for step insertions | inhour equation | within 2% |
 | Prompt jump | beta / (beta - rho) | within 3% |
-| Pool heat-up without chiller at 10 kW | 0.36 C/h less room losses | 0.33 C/h |
-| $4 excursion, no scram | SPERT-I destructive test ($3.3): 2.3 GW, 31 MJ, plates melted | 3.4 GW, 27 MJ, melting |
-| $1.50 excursion, no scram | SPERT-I: self-limiting, no damage | 132 MW peak, 251 C, no damage |
-| Instruments reading 3x low | 2019-2020 PUR-1 event: ran above the 12 kW license limit | 28 kW true at 9.4 kW indicated |
+| Banked critical rod height | about 53.5 cm (SAR 2008) | 53.9 cm |
+| Shutdown margin | 0.018 measured | 0.018 |
+| 0.6% step from 12 kW, scram at 18 kW actual | 46.4 kW at 0.173 s (SAR, PARET) | 55 kW at 0.172 s |
+| 0.6% over 10 s from 12 kW | 18.4 kW (SAR, PARET) | 18.4 kW |
+| Hot clad at 18 kW | about 43 C (SAR, NATCON) | 44.7 C |
+| Pool heat-up without chiller at 10 kW | about 0.36 C/h | 0.33 C/h |
+| Instruments reading 3x low | 2019-2020 event: above 12 kW whenever indicated passed about 4 kW | 30 kW true at 10 kW indicated |
+| Fuel damage threshold, no scram | SPERT-I plate core: no damage around $1.5, melting at $3.3 | none at $1.50, blistering from about $2.5, melting at $3.3 |
+
+Remaining gaps against the licensing analyses are listed in
+[docs/pur1_reference.md](docs/pur1_reference.md#benchmarks-against-the-licensing-analyses).
 
 ## Layout
 

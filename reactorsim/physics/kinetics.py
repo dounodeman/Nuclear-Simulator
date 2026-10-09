@@ -34,6 +34,14 @@ class DelayedNeutronData:
         return float(self.beta.sum())
 
     @classmethod
+    def from_groups(cls, beta: list[float], lam: list[float], beta_eff: float | None = None) -> "DelayedNeutronData":
+        """Group data from a core-specific calculation, optionally rescaled to a different total beta."""
+        b = np.asarray(beta, dtype=float)
+        if beta_eff is not None:
+            b = b * beta_eff / b.sum()
+        return cls(beta=b, lam=np.asarray(lam, dtype=float))
+
+    @classmethod
     def u235_thermal(cls, beta_eff: float) -> "DelayedNeutronData":
         rel = KEEPIN_U235_RELATIVE / KEEPIN_U235_RELATIVE.sum()
         return cls(beta=beta_eff * rel, lam=KEEPIN_U235_LAMBDA.copy())

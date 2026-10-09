@@ -42,69 +42,94 @@ def _summary(sim: Simulator, **extra) -> dict:
 # ---------------------------------------------------------------------------- operator scripts
 
 class StartupOperator:
-    """Follows a PUR-1-style startup: shims to the shim range, regulating rod to 30 cm,
-    then shims out in small steps to a stable positive period of 30-60 s, source out above 5 W,
-    linear channel ranged up by hand, and the servo engaged near the target power."""
+    """Follows a PUR-1-style startup. The interlock lets only one rod withdraw at a time, so the
+    operator moves rods one after another: shims to the shim range, regulating rod to 30 cm, then
+    the shims alternately in small steps to a stable positive period of 30-120 s, the source out
+    above 5 W, the linear channel ranged up by hand, and the servo engaged near the target power."""
 
     def __init__(self, target_w: float = 10_000.0, shim_range_cm: float = 40.0, min_period_s: float = 30.0):
         self.target_w = target_w
         self.shim_range_cm = shim_range_cm
         self.min_period_s = min_period_s
-        self.phase = "shims_to_range"
+        self.phase = "rods_to_range"
+        self.queue: list[tuple[str, float]] = []
         self.wait_until = 0.0
+        self.next_shim = 0
         self.done = False
+
+    def _moving(self, sim: Simulator) -> bool:
+        return any(r.target is not None or r.command != 0 for r in sim.rods.values())
+
+    def _step_shim(self, sim: Simulator, delta: float) -> None:
+        names = sim.design.shim_rods
+        rod = sim.rods[names[self.next_shim % len(names)]]
+        self.next_shim += 1
+        sim.drive_to(rod.name, rod.drive_position + delta)
 
     def __call__(self, sim: Simulator) -> None:
         d = sim.design
         r = sim.instruments.readings
-        shims = [sim.rods[n] for n in d.shim_rods]
-        reg = sim.rods[d.regulating_rod]
         period = r.ch2_period if r.ch1_saturated else r.ch1_period
 
         # Range the linear channel like an operator: up at 80% of scale, down below 20%.
         if r.ch3_percent_of_range > 80:
             sim.instruments.range_up()
-        elif r.ch3_percent_of_range < 20 and sim.instruments.ch3_range > 0 and self.phase != "shims_to_range":
+        elif 0 < r.ch3_percent_of_range < 20 and sim.instruments.ch3_range > 0:
             sim.instruments.range_down()
         if sim.source_inserted and sim.power > 5.0:
             sim.withdraw_source()
             sim._event("operator", "Source withdrawn above 5 W")
 
-        if self.phase == "shims_to_range":
-            for rod in shims:
-                if rod.target is None and rod.drive_position < self.shim_range_cm - 1e-6:
-                    sim.drive_to(rod.name, self.shim_range_cm)
-            if all(rod.drive_position >= self.shim_range_cm - 1e-6 for rod in shims):
-                sim.drive_to(reg.name, 30.0)
-                self.phase = "reg_to_30"
-        elif self.phase == "reg_to_30":
-            if reg.target is None:
-                self.phase = "approach"
-                self.wait_until = sim.t + 30.0
+        if self.phase == "rods_to_range":
+            if not self.queue and not self._moving(sim):
+                self.queue = [(n, self.shim_range_cm) for n in d.shim_rods] + [(d.regulating_rod, 30.0)]
+                self.phase = "moving_to_range"
+        if self.phase == "moving_to_range":
+            if not self._moving(sim):
+                if self.queue:
+                    sim.drive_to(*self.queue.pop(0))
+                else:
+                    self.phase = "approach"
+                    self.wait_until = sim.t + 30.0
         elif self.phase == "approach":
-            if sim.t < self.wait_until:
+            if sim.t < self.wait_until or self._moving(sim):
                 return
             if 0 < period < 120 and math.isfinite(period):
                 self.phase = "ascend"
             else:
-                for rod in shims:
-                    sim.drive_to(rod.name, rod.drive_position + 0.5)
-                self.wait_until = sim.t + 45.0
+                self._step_shim(sim, 1.0)
+                self.wait_until = sim.t + 20.0
         elif self.phase == "ascend":
+            if self._moving(sim):
+                return
             if 0 < period < self.min_period_s:
-                for rod in shims:
-                    sim.drive_to(rod.name, rod.drive_position - 0.2)
+                self._step_shim(sim, -0.2)
             elif r.ch3_power_w >= 0.7 * self.target_w:
                 sim.set_servo(True, self.target_w)
                 sim._event("operator", f"Servo engaged at {self.target_w:g} W")
                 self.phase = "hold"
             elif (period > 90 or period < 0) and sim.t >= self.wait_until:
-                for rod in shims:
-                    sim.drive_to(rod.name, rod.drive_position + 0.2)
+                self._step_shim(sim, 0.2)
                 self.wait_until = sim.t + 20.0
         elif self.phase == "hold":
             if abs(sim.servo.error) < 0.01:
                 self.done = True
+
+
+def shim_to_keep_reg_in_band(sim: Simulator, low: float = 15.0, high: float = 45.0) -> None:
+    """Operator habit while on the servo: when the regulating rod drifts out of its band,
+    move a shim 0.5 cm (one rod at a time) so the servo keeps control authority."""
+    reg = sim.rods[sim.design.regulating_rod]
+    if not sim.servo.enabled or sim.setback_active or sim.scrammed:
+        return
+    if any(sim.rods[n].target is not None for n in sim.design.shim_rods):
+        return
+    if reg.drive_position > high:
+        shim = min(sim.design.shim_rods, key=lambda n: sim.rods[n].drive_position)
+        sim.drive_to(shim, sim.rods[shim].drive_position + 0.5)
+    elif reg.drive_position < low:
+        shim = max(sim.design.shim_rods, key=lambda n: sim.rods[n].drive_position)
+        sim.drive_to(shim, sim.rods[shim].drive_position - 0.5)
 
 
 # ---------------------------------------------------------------------------- scenarios
@@ -138,9 +163,9 @@ def scram_from_power(seed: int | None = None):
 
 def xenon_transient(seed: int | None = None, run_hours: float = 40.0, shutdown_hours: float = 50.0):
     sim = Simulator(seed=seed, max_substep=2.0)
-    sim.initialize_at_power(10_000.0, xenon="clean")
+    sim.initialize_at_power(10_000.0, reg_position_cm=30.0, xenon="clean")
     sim.set_servo(True, 10_000.0)
-    sim.run(run_hours * 3600, dt=1.0, record_every=300.0)
+    sim.run(run_hours * 3600, dt=1.0, record_every=300.0, each_step=shim_to_keep_reg_in_band)
     eq = sim.reactivity()["xenon"]
     sim.scram("Planned shutdown")
     sim.run(shutdown_hours * 3600, dt=1.0, record_every=300.0)
@@ -211,11 +236,11 @@ def reactivity_accident(seed: int | None = None, dollars: float = 1.5, rps: bool
 
 def loss_of_chiller(seed: int | None = None, hours: float = 30.0):
     sim = Simulator(seed=seed, max_substep=2.0)
-    sim.initialize_at_power(10_000.0)
+    sim.initialize_at_power(10_000.0, reg_position_cm=30.0)
     sim.set_servo(True, 10_000.0)
     sim.chiller_available = False
     sim._event("operator", "Chiller tripped")
-    sim.run(hours * 3600, dt=1.0, record_every=60.0)
+    sim.run(hours * 3600, dt=1.0, record_every=60.0, each_step=shim_to_keep_reg_in_band)
     alarm = next((e.time for e in sim.events if e.message == "Pool temperature high"), None)
     return sim, _summary(sim, hours_to_pool_temp_alarm=None if alarm is None else alarm / 3600,
                          heatup_rate_c_per_h=(sim.history[-1].pool_temp - sim.history[0].pool_temp)
@@ -226,12 +251,13 @@ def loss_of_pool_water(seed: int | None = None, leak_m_per_hour: float = 2.0, ho
     """A pool leak at full power. Radiation monitors see the shielding thin and scram the reactor;
     the drain continues below the top of the core."""
     sim = Simulator(seed=seed, max_substep=1.0)
-    sim.initialize_at_power(10_000.0, history_hours=8.0)
+    sim.initialize_at_power(10_000.0, reg_position_cm=30.0, history_hours=8.0)
     sim.set_servo(True, 10_000.0)
     sim.start_leak(leak_m_per_hour)
     sim._event("operator", f"Pool leak {leak_m_per_hour:g} m/h")
 
     def stop_leak_at_floor(s: Simulator):
+        shim_to_keep_reg_in_band(s)
         if s.level_m <= -s.design.thermal.core_height_m and s.leak_rate_m_s > 0:
             s.leak_rate_m_s = 0.0
             s._event("operator", "Pool drained below core")
@@ -243,32 +269,70 @@ def loss_of_pool_water(seed: int | None = None, leak_m_per_hour: float = 2.0, ho
 
 
 def calibration_error(seed: int | None = None, gain: float = 1 / 3, minutes: float = 20.0):
-    """Recreates the 2019-2020 PUR-1 event: new nuclear instruments read about 3x low,
-    so holding an indicated 10 kW actually runs the core near 30 kW, past the 12 kW license limit."""
+    """Recreates the 2019-2020 PUR-1 event (EA-20-144): new nuclear instruments read about 3x low,
+    so the core ran above the 12 kW license limit whenever indicated power passed about 4 kW.
+    ``gain=1/1.76`` reproduces the February 2021 event (17.5 kW actual at 9.95 kW indicated)."""
     sim = Simulator(seed=seed)
-    sim.initialize_at_power(1_000.0)
     for ch in ("ch2", "ch3", "ch4"):
         sim.instruments.set_fault(ch, "gain", gain)
+    sim.initialize_at_power(1_000.0, reg_position_cm=20.0)
     sim._event("operator", f"Power channels miscalibrated: read {gain:.2f} x true")
-    sim.instruments.auto_range(1000 * gain)
     sim.auto_range = True
     sim.set_servo(True, 10_000.0)
-    sim.run(minutes * 60, record_every=1.0)
+
+    sim.run(minutes * 60, record_every=1.0, each_step=shim_to_keep_reg_in_band)
     return sim, _summary(sim, indicated_power_w=sim.instruments.readings.ch3_power_w,
                          true_power_w=sim.power, licensed_power_w=sim.design.licensed_power)
 
 
 def linear_channel_failure(seed: int | None = None):
-    """The linear channel feeding the servo fails low at full power. The servo sees power vanish
-    and withdraws the regulating rod; the independent channels have to catch it."""
+    """The linear channel feeding the servo starts reading half of true power at 10 kW. The servo
+    withdraws the regulating rod to restore the indicated power; the independent channels have to
+    catch the real rise."""
     sim = Simulator(seed=seed)
     sim.initialize_at_power(10_000.0)
     sim.set_servo(True, 10_000.0)
     sim.run(10, record_every=0.1)
-    sim.set_channel_fault("ch3", "stuck")
-    sim.instruments._last["ch3"] = 0.0
+    sim.set_channel_fault("ch3", "gain", 0.5)
     sim.run(300, record_every=0.1)
     return sim, _summary(sim)
+
+
+def _sar_transient(ramp_s: float, scram: bool, start_w: float):
+    """Licensing-basis insertion of the full 0.6% dk/k excess (SAR 2008/2015, RAI 2013).
+
+    With scram: the period trip is assumed failed, power channels read 1.5x low so the 12 kW
+    indicated scram happens at 18 kW actual, scram delay 0.1 s, and only SS2 inserts."""
+    sim = Simulator(max_substep=0.01 if scram else 0.5)
+    sim.thermal.pool_temp = 27.0  # analysis pool temperature
+    if scram:
+        for ch in ("ch2", "ch3", "ch4"):
+            sim.instruments.set_fault(ch, "gain", 1 / 1.5)
+    sim.initialize_at_power(start_w)
+    if scram:
+        sim.instruments.ch3_range = 14  # 10 kW range, so 120% of range is 12 kW indicated
+        sim.protection.failed_trips = {"period"}
+        sim.rods["SS1"].stuck = True
+    else:
+        sim.protection.enabled = False
+    sim._sample_instruments(0.0)
+    sim.run(1.0, dt=0.01, record_every=0.01)
+    t0 = sim.t
+    sim.insert_reactivity(0.006, ramp_seconds=ramp_s)
+    sim._event("operator", f"0.6% dk/k inserted {'as a step' if ramp_s == 0 else f'over {ramp_s:g} s'}")
+    peak = {"p": 0.0, "t": 0.0, "clad": 0.0}
+
+    def track(x: Simulator):
+        if x.power > peak["p"]:
+            peak["p"], peak["t"] = x.power, x.t - t0
+        peak["clad"] = max(peak["clad"], x.peak_fuel_temp())
+
+    if scram:
+        sim.run(30, dt=0.002, record_every=0.002, each_step=track)
+    else:
+        sim.run(1200, dt=0.05, record_every=1.0, each_step=track)
+    return sim, _summary(sim, peak_power_kw=peak["p"] / 1e3, time_of_peak_s=peak["t"],
+                         peak_clad_c=peak["clad"])
 
 
 SCENARIOS: dict[str, Scenario] = {s.key: s for s in [
@@ -297,5 +361,14 @@ SCENARIOS: dict[str, Scenario] = {s.key: s for s in [
     Scenario("calibration_error", "Instrument miscalibration (2019-2020 event)",
              "Power channels read 3x low; servo holds indicated 10 kW.", calibration_error),
     Scenario("linear_channel_failure", "Servo channel failure",
-             "Linear channel feeding the servo fails low at full power.", linear_channel_failure),
+             "Linear channel feeding the servo reads half of true power at 10 kW.", linear_channel_failure),
+    Scenario("sar_step_scram", "SAR benchmark: 0.6% step from 12 kW with scram",
+             "Period trip failed, scram at 18 kW actual, only SS2 inserts. SAR: 46.4 kW peak at 0.173 s.",
+             lambda seed=None: _sar_transient(0.0, True, 12_000.0)),
+    Scenario("sar_ramp_scram", "SAR benchmark: 0.6% over 10 s from 12 kW with scram",
+             "Same assumptions as the step case. SAR: 18.4 kW peak.",
+             lambda seed=None: _sar_transient(10.0, True, 12_000.0)),
+    Scenario("sar_step_no_scram", "SAR benchmark: 0.6% step from 10 kW, no scram",
+             "Protection failed. SAR (PARET): 2.39 MW peak, 133 C clad.",
+             lambda seed=None: _sar_transient(0.0, False, 10_000.0)),
 ]}
