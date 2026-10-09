@@ -12,12 +12,18 @@ dependencies = ["numpy>=1.24", "scipy>=1.10", "matplotlib>=3.7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+app = ["pywebview>=5"]
+mac = ["pywebview>=5", "pyinstaller>=6.6"]
 
 [project.scripts]
 reactorsim = "reactorsim.cli:main"
+reactorsim-app = "reactorsim.app.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["reactorsim*"]
+
+[tool.setuptools.package-data]
+"reactorsim.app" = ["static/*", "static/vendor/three/*", "static/vendor/three/*/*"]
 
 [tool.pytest.ini_options]
 markers = ["slow: long-running scenario tests"]

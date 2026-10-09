@@ -47,6 +47,56 @@ sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
 ```
 
+## Control room (Mac app)
+
+![The console in the reactor hall](docs/img/control_room.png)
+
+You are an operator standing in the PUR-1 reactor hall. Walk around it in first person
+(WASD, Shift to run, mouse to look), climb the steps to the shield deck and look down into
+the pool, and operate the reactor from the console on the east wall:
+
+- **Workstation 1, reactor control** (right-hand screen): the four neutron channels, rod
+  drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
+  reset, and the annunciators.
+- **Workstation 2, plant data** (left-hand screen): the power history, a core camera, pool and
+  radiation readings, reactivity and the event log.
+- **Hard-wired controls** on the console: hold a rod drive's UP or DOWN button to move it,
+  the red manual scram button, the magnet power switch (scram) and the master key switch
+  (scram reset), plus NS buttons for the startup source. The hallway scram button by the
+  south door works too.
+
+The screens, rod position readouts, annunciator lamps and the 4 x 3 video wall show the live
+plant, and the blades in the core move with the rods. Esc opens a menu with the simulation
+speed (1x to 100x), restart, true plant values and the instructor station, which injects
+experiments, rod and instrument faults, a chiller trip, a pool leak and protection failures.
+
+![Reactor control workstation](docs/img/reactor_workstation.png)
+
+**Install the app.** Every merge to `main` that touches the simulator builds
+`PUR-1 Simulator.app` for Apple silicon and publishes it on the repository's
+[Releases](../../releases) page as `PUR-1-Simulator-macOS.zip`.
+
+1. Download the zip from the latest release, unzip it and drag the app to Applications.
+2. The app is not signed with an Apple developer certificate, so macOS blocks the first
+   launch. Open it once, then go to System Settings > Privacy & Security and click
+   **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/PUR-1 Simulator.app"`).
+3. In the app, click **Updates** and paste a GitHub fine-grained token with read-only
+   *Contents* access to this repository. The repository is private, so the app needs it to
+   see new builds. It is stored only on that Mac.
+
+From then on the app checks for a newer build when it opens, and **Install and restart**
+downloads it, swaps it in place and relaunches.
+
+**Run it from source** (any OS):
+
+```bash
+pip install -e .[app]        # pywebview gives it its own window; without it, it opens in the browser
+python -m reactorsim app     # or: python -m reactorsim app --browser --initial power_10kw
+```
+
+Build the app yourself on a Mac with `pip install ".[mac]"`,
+`python packaging/macos/make_icon.py` and `pyinstaller packaging/macos/pur1.spec`.
+
 ## 3D models
 
 Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area,
@@ -98,6 +148,8 @@ reactorsim/
   reactors/    one module per reactor design (pur1.py)
   simulator.py the control loop and operator actions
   scenarios.py scripted operations and accidents
+  app/         control room: live session, local server, web page, updater
+packaging/     Mac app build (PyInstaller)
 tests/         validation tests
 docs/          reference data and plots
 ```
@@ -111,4 +163,4 @@ beside the current lumped models.
 1. PUR-1 reference data (done; open questions in the reference doc)
 2. Core physics engine with validation (this release)
 3. Control system detail and a fuller accident set
-4. Control-room operator interface on top of the engine
+4. Control-room operator interface on top of the engine (first version: the Mac app)

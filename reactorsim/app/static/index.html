@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PUR-1 Simulator</title>
+<link rel="stylesheet" href="app.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<!-- The reactor hall, walked in first person -->
+<div id="world" class="world"></div>
+
+<!-- Heads-up display -->
+<div class="hud" id="hud">
+  <div class="hud-top">
+    <span class="mark">PUR-1</span>
+    <span id="clock" class="digits">00:00:00</span>
+    <span id="speedTag" class="speed-tag">1×</span>
+  </div>
+  <div id="banner" class="banner" hidden></div>
+  <div class="crosshair" id="crosshair"></div>
+  <div class="prompt" id="prompt" hidden></div>
+  <div class="hud-help" id="hudHelp">WASD walk · Shift run · mouse look · click or E to use · Esc menu</div>
+</div>
+
+<!-- Menu: shown at start and on Esc -->
+<div class="menu" id="menu">
+  <div class="menu-card">
+    <div class="menu-title"><span class="mark">PUR-1</span> Purdue University Reactor Number One</div>
+    <p class="menu-lead">You are in the reactor hall. The console with the two workstations, the hard-wired rod
+      drive buttons and the scram button is on the east wall, under the video wall. Walk up to it to operate the reactor.</p>
+    <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
+    <h3>Simulation speed</h3>
+    <div class="speed" id="speed" role="group" aria-label="Simulation speed"></div>
+    <h3>Start over</h3>
+    <div class="form-row">
+      <select id="initial" aria-label="Initial state"></select>
+      <button id="restart" class="ghost">Restart</button>
+    </div>
+    <h3>Tools</h3>
+    <div class="form-row">
+      <button id="truthToggle" class="ghost" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
+      <button id="instructorToggle" class="ghost" aria-pressed="false">Instructor station</button>
+      <button id="updateBtn" class="ghost" title="Updates">Updates</button>
+    </div>
+    <h3>Controls</h3>
+    <table class="keys">
+      <tr><td>W A S D / arrows</td><td>walk</td></tr>
+      <tr><td>Shift</td><td>run</td></tr>
+      <tr><td>Mouse</td><td>look around</td></tr>
+      <tr><td>Click or E</td><td>use the workstation or button in front of you (hold for rod drives)</td></tr>
+      <tr><td>Esc</td><td>leave a workstation, or open this menu</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Workstation: reactor control -->
+<section class="station" id="station-reactor" hidden aria-label="Reactor control workstation">
+  <div class="monitor">
+    <div class="monitor-head">
+      <span>REACTOR CONTROL · Workstation 1</span>
+      <button class="ghost" data-close>Step away (Esc)</button>
+    </div>
+    <section class="annunciators" id="annunciators" aria-label="Annunciators"></section>
+    <div class="station-grid reactor">
+      <section class="panel channels" aria-label="Neutron channels">
+        <h2>Nuclear instruments</h2>
+        <div class="channel" id="ch1">
+          <div class="ch-head"><span class="ch-name">CH1 Startup</span><span class="ch-sub">fission chamber</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">cps</span></div>
+          <div class="bar log"><div class="fill"></div><div class="ticks" data-ticks="0.1,1,10,100,1e3,1e4,1e5"></div></div>
+          <div class="period">Period <span class="digits" data-v="period">∞</span></div>
+          <div class="truth" data-v="truth"></div>
+        </div>
+        <div class="channel" id="ch2">
+          <div class="ch-head"><span class="ch-name">CH2 Log power</span><span class="ch-sub">wide range</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">% rated</span></div>
+          <div class="bar log"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="1e-5,1e-4,1e-3,0.01,0.1,1,10,100"></div></div>
+          <div class="period">Period <span class="digits" data-v="period">∞</span></div>
+          <div class="truth" data-v="truth"></div>
+        </div>
+        <div class="channel" id="ch3">
+          <div class="ch-head"><span class="ch-name">CH3 Linear power</span><span class="ch-sub" data-v="range">range</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit" data-v="unit">W</span></div>
+          <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="110"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
+          <div class="range-ctl">
+            <span class="digits small" data-v="pct">0% of range</span>
+            <span class="spacer"></span>
+            <button data-range="down" title="Range down">▼</button>
+            <button data-range="up" title="Range up">▲</button>
+            <button data-range="auto" class="toggle" title="Auto range">Auto</button>
+          </div>
+        </div>
+        <div class="channel" id="ch4">
+          <div class="ch-head"><span class="ch-name">CH4 Safety</span><span class="ch-sub">linear, % rated</span></div>
+          <div class="readout"><span class="big digits" data-v="value">-</span><span class="unit">%</span></div>
+          <div class="bar lin"><div class="fill"></div><div class="mark-line" data-at="120"></div><div class="ticks" data-ticks="0,25,50,75,100,125,150"></div></div>
+        </div>
+      </section>
+
+      <section class="panel rods-panel" aria-label="Control rods">
+        <h2>Control rods</h2>
+        <div class="rods" id="rods"></div>
+        <div class="row-ctl"><button id="stopAll" class="ghost">Stop all drives</button></div>
+        <p class="hint" id="interlocks"></p>
+      </section>
+
+      <section class="panel aux-panel">
+        <h2>Automatic power control</h2>
+        <div class="servo">
+          <button id="servoBtn" class="toggle">Servo</button>
+          <label>Setpoint <input id="setpoint" type="number" min="0.001" max="12000" step="any" value="10000"> W</label>
+          <button id="setpointBtn" class="ghost">Set</button>
+        </div>
+        <div class="servo-err">Deviation <span class="digits" id="servoErr">-</span></div>
+        <h3>Startup source</h3>
+        <div class="servo">
+          <button id="sourceBtn" class="toggle">Source in</button>
+          <span class="hint" id="sourceHint"></span>
+        </div>
+        <div class="scram-box">
+          <button id="scramBtn" class="scram">SCRAM</button>
+          <button id="resetScram" class="ghost">Reset scram</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- Workstation: plant data -->
+<section class="station" id="station-plant" hidden aria-label="Plant data workstation">
+  <div class="monitor">
+    <div class="monitor-head">
+      <span>PLANT DATA · Workstation 2</span>
+      <button class="ghost" data-close>Step away (Esc)</button>
+    </div>
+    <div class="station-grid plant">
+      <section class="panel trend-panel">
+        <div class="panel-head">
+          <h2>Power history</h2>
+          <div class="seg" id="trendWindow">
+            <button data-w="60">1 min</button><button data-w="600" class="on">10 min</button><button data-w="3600">1 h</button>
+          </div>
+        </div>
+        <canvas id="trend" aria-label="Power trend"></canvas>
+      </section>
+      <section class="panel core-panel">
+        <div class="panel-head"><h2>Core camera</h2><span class="hint">drag to orbit</span></div>
+        <div id="view3d" class="view3d"><div class="view-msg">Loading…</div></div>
+      </section>
+      <section class="panel process" aria-label="Process and radiation">
+        <h2>Pool and radiation</h2>
+        <div class="kv" id="process"></div>
+        <h3>Reactivity</h3>
+        <div class="rho" id="rho"></div>
+      </section>
+      <section class="panel log" aria-label="Event log">
+        <h2>Event log</h2>
+        <ol id="events"></ol>
+      </section>
+    </div>
+  </div>
+</section>
+
+<aside class="drawer" id="instructor" hidden aria-label="Instructor station">
+  <div class="drawer-head"><h2>Instructor station</h2><button class="ghost" id="closeInstructor">Close</button></div>
+  <p class="hint">Faults and events the operator does not control. Everything you do here goes in the event log.</p>
+  <h3>Experiment reactivity</h3>
+  <div class="form-row">
+    <label>Worth <input id="expDollars" type="number" step="0.05" value="0.38"> $</label>
+    <label>Over <input id="expRamp" type="number" step="1" min="0" value="0"> s</label>
+    <button id="expBtn">Insert</button>
+  </div>
+  <p class="hint">The technical specification limit for a movable experiment is 0.003 dk/k, about $0.38.</p>
+  <h3>Rod drive faults</h3>
+  <div class="form-row" id="rodFaults"></div>
+  <h3>Instrument faults</h3>
+  <div class="form-row">
+    <select id="faultCh"><option value="ch1">CH1 startup</option><option value="ch2">CH2 log</option><option value="ch3">CH3 linear</option><option value="ch4">CH4 safety</option></select>
+    <select id="faultMode">
+      <option value="none">Normal</option><option value="fail_low">Fail low</option><option value="fail_high">Fail high</option>
+      <option value="stuck">Stuck</option><option value="gain">Gain error</option><option value="drift">Drift</option><option value="hv_loss">HV loss</option>
+    </select>
+    <label>Value <input id="faultValue" type="number" step="0.1" value="0.5" title="Gain factor, or drift fraction per hour"></label>
+    <button id="faultBtn">Apply</button>
+  </div>
+  <h3>Plant</h3>
+  <div class="form-row">
+    <button id="chillerBtn" class="toggle">Chiller running</button>
+    <label>Pool leak <input id="leakRate" type="number" step="0.5" min="0" max="20" value="0"> m/h</label>
+    <button id="leakBtn">Set</button>
+  </div>
+  <h3>Protection system</h3>
+  <div class="form-row">
+    <button id="rpsBtn" class="toggle">RPS in service</button>
+    <label class="check"><input type="checkbox" id="failPeriod"> Period trips failed</label>
+    <label class="check"><input type="checkbox" id="failRad"> Radiation trips failed</label>
+  </div>
+</aside>
+
+<dialog id="updateDlg">
+  <form method="dialog">
+    <h2>Updates</h2>
+    <p id="updMsg" class="upd-msg">Checking…</p>
+    <pre id="updNotes" class="upd-notes" hidden></pre>
+    <div id="tokenRow" class="token-row">
+      <label for="tokenInput">GitHub token</label>
+      <input id="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
+      <p class="hint">The repository is private, so the app needs a fine-grained token with read-only
+        <b>Contents</b> access to dounodeman/nuclear-simulator to see new builds. It is stored only on this Mac.</p>
+    </div>
+    <div class="dlg-actions">
+      <span id="buildInfo" class="hint"></span>
+      <span class="spacer"></span>
+      <button value="cancel" class="ghost">Close</button>
+      <button id="saveToken" type="button" class="ghost">Save token</button>
+      <button id="installBtn" type="button" hidden>Install and restart</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
