@@ -7,8 +7,8 @@ files are the assets the future control-room interface will load.
 
 | File | What it is |
 | --- | --- |
-| `export/reactor_hall.glb` | The whole room: pool and biological shield, bridge with the five drives, core, in-pool fuel storage, process loop, HVAC, doors, hoist, console, video wall and racks |
-| `export/control_room.glb` | The console area alone (console, two displays, hard-wired controls, chairs, 4 x 3 video wall, equipment racks) on a floor slab with the east wall |
+| `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, console, video wall, I&C cabinets and diagnostics bench |
+| `export/control_room.glb` | The operator area alone (desk console with three monitors, hard-wired panel, blue chairs, carpet mat, 4 x 3 video wall, four I&C cabinets, diagnostics bench) on a floor slab with the east and south walls |
 | `export/pur1_core.glb` | The core alone: grid plate, 13 standard + 3 control assemblies with plates, 20 graphite reflectors, irradiation tubes, control blades, ion chambers, fission chamber, source, drop tubes |
 | `renders/*.png` | Preview renders of each model |
 
@@ -31,7 +31,7 @@ on Debian/Ubuntu) and `LIBGL_ALWAYS_SOFTWARE=1` when there is no GPU.
 - `pur1/dims.py` every dimension used, tagged `SOURCED` (a published number) or `ASSUMED` (a modelling choice). Change numbers here, not in the builders.
 - `pur1/common.py` scene reset, material palette, a `MeshBuilder` that accumulates boxes, cylinders, tubes and rings into one mesh, export and render helpers.
 - `pur1/core.py` the core.
-- `pur1/control_room.py` console, video wall, racks.
+- `pur1/control_room.py` desk console, video wall, I&C cabinets, diagnostics bench.
 - `pur1/reactor_hall.py` room, pool, shield, bridge and drives, process loop; places the core and the console area.
 - `build.py` entry point, cameras and lights for the previews.
 
@@ -71,12 +71,15 @@ two workstation displays; console, hallway, key-switch and magnet-supply scrams.
 Assumed, pending drawings or photos (see `pur1/dims.py`): room size and height,
 shield thickness and outer radius, lattice pitch, positions of SS2 and RR, which
 side carries the irradiation tubes, bridge and drive-housing geometry, console
-size and layout, rack count, placement of everything in the room, the hoist, the
-steps up to the shield deck, and the door locations. The building level (ground
+size and layout, cabinet count, placement of everything in the room, the hoist, the
+stair and platform, and the door locations. The four reference photos in the Drive
+"PUR-1 Reference Images" folder fix the look of the pool wall, console, cabinets,
+video wall, stair, walls, floor striping and diagnostics bench; the dimensions read
+off them are still marked ASSUMED. The building level (ground
 floor high bay vs basement) does not affect the room model.
 
-Reference images could not be downloaded in the build environment (purdue.edu,
-nrc.gov and arxiv.org are blocked there); the models follow the captions and
-written descriptions in the Drive "PUR-1 Reference Images" index. The first
-things to check against the real photos are the console footprint, the height
-of the parapet and the position of the console relative to the pool.
+The four reference photos of the real room (pool wall, console, cabinets, video wall,
+stair, diagnostics bench) are in the Drive "PUR-1 Reference Images" folder, and the
+models follow them; the other reference images could not be downloaded in the build
+environment (purdue.edu, nrc.gov and arxiv.org are blocked there), so the core and
+in-pool detail still follow the captions and written descriptions in the folder's index.

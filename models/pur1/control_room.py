@@ -1,120 +1,163 @@
-"""PUR-1 operator area: the Curtiss-Wright/Mirion digital console (2019), the
-150 ft2 video wall, equipment racks, operator chairs and the hallway scram.
+"""PUR-1 operator area, modelled after the reference photos in the project
+Drive folder: a desk-style black console with three monitors and blue chairs on a
+carpet mat a few feet from the pool, the 150 ft2 tiled video wall on the east
+wall, a row of tall black digital I&C cabinets with red LED readouts, and a
+diagnostics bench with monitors and a whiteboard by the south wall.
 
 PUR-1 has no separate control room: the console stands in the reactor room
 (B70A) with the pool in view. `build_control_room()` therefore builds the
-console area as a group that `reactor_hall.py` places inside the hall, and the
+operator area as a group that `reactor_hall.py` places inside the hall, and the
 stand-alone control_room.glb adds just a floor and the east wall around it.
 
-Interactive objects carry a `ui_` prefix and custom properties so the future
-control-room interface can find them by name:
-  ui_Display_Left / ui_Display_Right     operator workstation panel displays
+Interactive objects carry a `ui_` prefix and custom properties so the in-hall
+interface (reactorsim/app/static/world.js) can find them by name:
+  ui_Display_Left / Center / Right       operator workstation monitors
   ui_VideoWall_r{row}c{col}              12 video-wall tiles
   ui_Scram_Console, ui_Scram_Hallway     manual scram push-buttons
   ui_KeySwitch_Master                    master key switch (also a scram)
   ui_Rod_{SS1,SS2,RR,NS,FC}_{Up,Down}    drive push-buttons
+  ui_Readout_{drive}                     drive position readouts
   ui_MagnetPower_Switch                  shim-safety magnet power supply
   ui_Annunciator_{n}                     annunciator window tiles
+All screens face west (-X), towards the operator.
 """
 from __future__ import annotations
 
+import math
+
 from . import dims as D
-from .common import MeshBuilder, box, cylinder, empty, FT, IN
+from .common import MeshBuilder, box, cylinder, empty
+
+MONITOR_W, MONITOR_H = 0.54, 0.31      # 24 in 16:9 panel
+MONITOR_SPACING = 0.66
+
+
+def _monitor(parent, mats, name, x_back, y, z_base, w=MONITOR_W, h=MONITOR_H, role=None, stand=True):
+    """A flat-panel monitor on a stand. x_back = x of the back of the stand foot; screen faces -X.
+    Returns the screen object. z_base = surface the stand sits on."""
+    zc = z_base + (0.16 if stand else 0.0) + h / 2
+    mb = MeshBuilder()
+    if stand:
+        mb.box((x_back - 0.06, y, z_base + 0.008), (0.12, 0.24, 0.016))           # foot
+        mb.box((x_back - 0.03, y, z_base + 0.10), (0.03, 0.05, 0.20))             # neck
+    mb.box((x_back - 0.05, y, zc), (0.03, w + 0.03, h + 0.03))                     # bezel
+    mb.build(f"{name}_Bezel", mats["screen_bezel"], parent)
+    scr = box(f"ui_Display_{name.split('_')[-1]}" if name.startswith("Display") else name,
+              (x_back - 0.068, y, zc), (0.005, w, h), mats["screen"], parent)
+    scr["role"] = role or scr.name
+    return scr
 
 
 def build_console(parent, mats, origin=(0, 0, 0)):
-    """Console at `origin` (floor level, centre of the desk footprint); operator faces +X."""
+    """Desk console at `origin` (floor level, centre of the desk footprint); operator faces +X."""
     ox, oy, oz = origin
     root = empty("Console", (ox, oy, oz), parent)
     depth, width, h = D.CONSOLE_SIZE
     out = {"root": root}
 
-    # Desk shell: body, kick space, worktop with a sloped instrument panel at the back.
-    body = MeshBuilder()
-    body.box((0, 0, h / 2 - 0.02), (depth, width, h - 0.04))
-    body.box((0.0, -width / 2 - 0.02, h / 2), (depth - 0.1, 0.04, h))     # end cheeks
-    body.box((0.0, width / 2 + 0.02, h / 2), (depth - 0.1, 0.04, h))
-    body.build("Console_Body", mats["console"], root)
-    top = MeshBuilder().box((0, 0, h + 0.015), (depth + 0.04, width + 0.08, 0.03))
-    top.build("Console_Worktop", mats["console_top"], root)
-    # Sloped back panel (the "turret"): a wedge made from a box rotated later by the interface is
-    # harder for glTF consumers, so build it from explicit vertices.
-    px0, px1 = depth / 2 - 0.42, depth / 2        # back 42 cm of the desk
-    z0, z1 = h + 0.03, h + 0.03 + 0.34
+    # Carpet mat under the console and chairs.
+    mw, ml = D.MAT_SIZE
+    box("CarpetMat", (-0.45, 0, 0.004), (mw, ml, 0.008), mats["carpet"], root)
+
+    # Black desk: thin top, two pedestals, modesty panel at the back, cable tray.
+    desk = MeshBuilder()
+    desk.box((0, 0, h - 0.015), (depth, width, 0.03))                                       # top
+    for y in (-width / 2 + 0.25, width / 2 - 0.25):
+        desk.box((0.05, y, (h - 0.03) / 2), (depth - 0.15, 0.45, h - 0.03))                # pedestals
+    desk.box((depth / 2 - 0.03, 0, (h - 0.03) / 2), (0.03, width - 0.9, h - 0.03))         # modesty panel
+    desk.build("Console_Desk", mats["desk_black"], root)
+
+    # Low hard-wired panel along the back edge of the desk, with a sloped face towards the operator.
+    px0, px1 = depth / 2 - 0.26, depth / 2
+    z0, z1 = h + 0.0, h + 0.13
     wedge = MeshBuilder()
     v = [(px0, -width / 2, z0), (px1, -width / 2, z0), (px1, width / 2, z0), (px0, width / 2, z0),
-         (px1 - 0.10, -width / 2, z1), (px1, -width / 2, z1), (px1, width / 2, z1), (px1 - 0.10, width / 2, z1)]
+         (px1 - 0.08, -width / 2, z1), (px1, -width / 2, z1), (px1, width / 2, z1), (px1 - 0.08, width / 2, z1)]
     f = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
     wedge._add(v, f)
-    wedge.build("Console_Turret", mats["panel"], root)
+    wedge.build("Console_HardwiredPanel", mats["panel"], root)
 
-    # Two workstation displays (27 in, 16:9) on the turret.
-    for side, nm in ((-1, "Left"), (1, "Right")):
-        y = side * 0.62
-        bez = MeshBuilder().box((px1 - 0.09, y, z1 + 0.22), (0.03, 0.62, 0.37))
-        bez.cylinder((px1 - 0.09, y, z1), 0.012, 0.05, 10)
-        bez.build(f"Display_{nm}_Bezel", mats["screen_bezel"], root)
-        scr = box(f"ui_Display_{nm}", (px1 - 0.105, y, z1 + 0.22), (0.005, 0.598, 0.337), mats["screen"], root)
-        scr["role"] = f"workstation_display_{nm.lower()}"
-
-    # Hard-wired controls on the sloped turret face. The face runs from (px0, z0) to (px1 - 0.10, z1);
-    # each control sits proud of the face at its own height.
     def face_x(z):
-        return px0 + (z - z0) / (z1 - z0) * (px1 - 0.10 - px0)
+        return px0 + (z - z0) / (z1 - z0) * (px1 - 0.08 - px0)
 
-    def button(name, y, z, mat, r=0.014, role=None):
-        ob = cylinder(name, (face_x(z) - 0.02, y, z), r, 0.035, mat, root, 16, axis="x")
+    def button(name, y, z, mat, r=0.012, role=None):
+        ob = cylinder(name, (face_x(z) - 0.018, y, z), r, 0.03, mat, root, 16, axis="x")
         ob["role"] = role or name
         return ob
 
-    def plate(name, y, z, w, h, mat, role):
-        ob = box(name, (face_x(z) + 0.004, y, z), (0.006, w, h), mat, root)
+    def plate(name, y, z, w, hh, mat, role):
+        ob = box(name, (face_x(z) + 0.004, y, z), (0.006, w, hh), mat, root)
         ob["role"] = role
         return ob
 
-    # Scram (red mushroom), master key switch, magnet power supply switch.
-    button("ui_Scram_Console", 0.0, z0 + 0.22, mats["button_red"], r=0.03, role="manual_scram")
-    button("ui_KeySwitch_Master", -0.14, z0 + 0.22, mats["button_black"], r=0.016, role="master_key_switch")
-    button("ui_MagnetPower_Switch", 0.14, z0 + 0.22, mats["button_black"], r=0.016, role="magnet_power_switch")
-    # Five drive up/down pairs with a position readout each (left of centre).
+    # The operator faces +X, so their left is +Y. Five drive up/down pairs with a position readout
+    # each on the right half of the panel, SS1 nearest the centre.
     for i, drive in enumerate(D.DRIVE_NAMES):
-        y = -0.95 + i * 0.16
-        button(f"ui_Rod_{drive}_Up", y, z0 + 0.22, mats["button_green"], role=f"drive_{drive}_up")
-        button(f"ui_Rod_{drive}_Down", y, z0 + 0.15, mats["button_black"], role=f"drive_{drive}_down")
-        plate(f"ui_Readout_{drive}", y, z0 + 0.07, 0.12, 0.035, mats["screen"], f"drive_{drive}_position")
-    # Annunciator tiles (3 rows x 8) right of centre.
-    for r in range(3):
-        for c in range(8):
-            n = r * 8 + c + 1
-            plate(f"ui_Annunciator_{n:02d}", 0.34 + c * 0.075, z0 + 0.25 - r * 0.075, 0.068, 0.062,
+        y = -0.26 - i * 0.15
+        button(f"ui_Rod_{drive}_Up", y - 0.035, z0 + 0.095, mats["button_green"], role=f"drive_{drive}_up")
+        button(f"ui_Rod_{drive}_Down", y + 0.035, z0 + 0.095, mats["button_black"], role=f"drive_{drive}_down")
+        plate(f"ui_Readout_{drive}", y, z0 + 0.04, 0.11, 0.032, mats["screen"], f"drive_{drive}_position")
+    # Scram (red mushroom), master key switch, magnet power supply switch, in the middle.
+    button("ui_Scram_Console", 0.0, z0 + 0.07, mats["button_red"], r=0.03, role="manual_scram")
+    button("ui_KeySwitch_Master", -0.12, z0 + 0.07, mats["button_black"], r=0.015, role="master_key_switch")
+    button("ui_MagnetPower_Switch", 0.12, z0 + 0.07, mats["button_black"], r=0.015, role="magnet_power_switch")
+    # Annunciator tiles (2 rows x 12) on the left half, numbered left to right as the operator reads them.
+    for r in range(2):
+        for c in range(12):
+            n = r * 12 + c + 1
+            plate(f"ui_Annunciator_{n:02d}", 0.92 - c * 0.058, z0 + 0.095 - r * 0.055, 0.052, 0.048,
                   mats["button_amber"] if n in (3, 11) else mats["panel"], f"annunciator_{n}")
-    # Keyboard and trackball on the worktop.
-    box("Keyboard", (-0.05, -0.62, h + 0.045), (0.16, 0.44, 0.02), mats["panel"], root)
-    box("Keyboard_2", (-0.05, 0.62, h + 0.045), (0.16, 0.44, 0.02), mats["panel"], root)
-    cylinder("Trackball", (-0.05, -0.30, h + 0.03), 0.03, 0.03, mats["panel"], root, 16)
-    # Pool-top / console radiation area monitor on the desk end.
-    ram = MeshBuilder().box((0.0, width / 2 + 0.12, h + 0.12), (0.12, 0.10, 0.18))
-    ram.cylinder((0.0, width / 2 + 0.12, h + 0.21), 0.01, 0.15, 8)
+
+    # Three monitors on stands behind the panel: Left (reactor control), Center (RTP operator display),
+    # Right (plant data). The stands sit on top of the hard-wired panel.
+    out["displays"] = {}
+    for i, nm in enumerate(("Left", "Center", "Right")):
+        y = (1 - i) * MONITOR_SPACING
+        out["displays"][nm] = _monitor(root, mats, f"Display_{nm}", px1 + 0.02, y, z1,
+                                       role=f"workstation_display_{nm.lower()}")
+    # Keyboards, mice and the trackball on the worktop.
+    box("Keyboard", (-0.08, MONITOR_SPACING, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
+    box("Keyboard_2", (-0.08, -MONITOR_SPACING, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
+    box("Keyboard_3", (-0.08, 0.0, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
+    cylinder("Trackball", (-0.08, 0.33, h + 0.0), 0.028, 0.03, mats["panel"], root, 16)
+    box("Mouse", (-0.08, -0.33, h + 0.015), (0.10, 0.06, 0.03), mats["panel"], root)
+    # Telephone (left end) and the console radiation monitor (right end) on the desk.
+    box("Telephone", (0.12, width / 2 - 0.14, h + 0.03), (0.20, 0.18, 0.06), mats["panel"], root)
+    ram = MeshBuilder().box((0.12, -width / 2 + 0.12, h + 0.09), (0.12, 0.10, 0.18))
+    ram.cylinder((0.12, -width / 2 + 0.12, h + 0.18), 0.01, 0.15, 8)
     out["ram_console"] = ram.build("RAM_Console", mats["steel"], root)
 
-    # Two operator chairs.
-    for i, y in enumerate((-0.62, 0.62)):
-        _chair(root, mats, (-0.65, y, 0), f"Chair_{i + 1}")
+    # Two blue operator chairs.
+    for i, y in enumerate((-MONITOR_SPACING, MONITOR_SPACING)):
+        _chair(root, mats, (-0.75, y, 0), f"Chair_{i + 1}")
     return out
 
 
-def _chair(parent, mats, origin, name):
+def _chair(parent, mats, origin, name, facing=0.0):
+    """Blue task chair with a black five-star base; the backrest is behind (-X rotated by `facing`)."""
     x, y, z = origin
+    c, s = math.cos(facing), math.sin(facing)
+
+    def rot(dx, dy):
+        return x + dx * c - dy * s, y + dx * s + dy * c
+
     mb = MeshBuilder()
-    mb.cylinder((x, y, z), 0.03, 0.40, 12)                      # gas lift
+    mb.cylinder((x, y, z), 0.03, 0.42, 12)                      # gas lift
     for k in range(5):                                           # star base
-        import math
         a = 2 * math.pi * k / 5
         mb.box((x + 0.17 * math.cos(a), y + 0.17 * math.sin(a), z + 0.03), (0.30, 0.04, 0.03))
+    for dx, dy in ((0.0, -0.21), (0.0, 0.21)):                   # armrest posts
+        ax, ay = rot(dx, dy)
+        mb.box((ax, ay, z + 0.58), (0.05, 0.03, 0.18))
     mb.build(f"{name}_Base", mats["rack"], parent)
-    seat = MeshBuilder().box((x, y, z + 0.47), (0.48, 0.48, 0.08))
-    seat.box((x - 0.22, y, z + 0.75), (0.06, 0.46, 0.50))        # backrest
-    seat.build(f"{name}_Seat", mats["chair"], parent)
+    seat = MeshBuilder()
+    seat.box((x, y, z + 0.46), (0.46, 0.46, 0.08))
+    bx, by = rot(-0.21, 0.0)
+    seat.box((bx, by, z + 0.76), (0.06, 0.44, 0.50))             # backrest
+    for dy in (-0.21, 0.21):                                     # armrest pads
+        ax, ay = rot(0.0, dy)
+        seat.box((ax, ay, z + 0.68), (0.26, 0.05, 0.03))
+    seat.build(f"{name}_Seat", mats["chair_blue"], parent)
 
 
 def build_video_wall(parent, mats, wall_x, center_y, center_z):
@@ -133,47 +176,110 @@ def build_video_wall(parent, mats, wall_x, center_y, center_z):
     return root
 
 
-def build_racks(parent, mats, origin, count, spacing=None):
-    """Row of 19 in equipment racks along a wall, fronts facing -X. origin = centre of first rack footprint."""
-    d, w, h = D.RACK_SIZE
-    spacing = spacing or w + 0.02
-    labels = ["RTP3000_RPS_RCS", "Mirion_NI_Channels", "Historian_Workstation", "DataDiode_Network", "UPS_30min"]
-    root = empty("EquipmentRacks", origin, parent)
+CABINET_LABELS = ["RTP3000_RPS_RCS", "Mirion_NI_Channels", "Historian_DataDiode", "UPS_30min"]
+
+
+def build_cabinets(parent, mats, origin, count, spacing=None, direction=-1):
+    """Row of tall black digital I&C cabinets along a wall, fronts facing -X.
+    origin = centre of the first cabinet footprint; the row runs along +Y * direction."""
+    d, w, h = D.CABINET_SIZE
+    spacing = spacing or w + 0.03
+    root = empty("ICCabinets", origin, parent)
     for i in range(count):
-        y = i * spacing
-        rack = MeshBuilder().box((0, y, h / 2), (d, w, h))
-        rack.build(f"Rack_{i + 1}_{labels[i % len(labels)]}", mats["rack"], root)
-        # Front panel: modules with LEDs.
+        y = direction * i * spacing
+        name = f"Cabinet_{i + 1}_{CABINET_LABELS[i % len(CABINET_LABELS)]}"
+        cab = MeshBuilder().box((0, y, h / 2), (d, w, h))
+        cab.box((0, y, h + 0.015), (d + 0.02, w + 0.02, 0.03))                                 # top cap
+        cab.build(name, mats["cabinet"], root)
+        # Front: a glass door frame with grey plug-in modules behind it, each with a red LED readout.
         front = MeshBuilder()
-        for u in range(9):
-            front.box((-d / 2 - 0.005, y, 0.15 + u * 0.20), (0.01, w - 0.08, 0.17))
-        front.build(f"Rack_{i + 1}_Modules", mats["rack_front"], root)
         leds = MeshBuilder()
-        for u in range(9):
-            leds.box((-d / 2 - 0.012, y - w / 2 + 0.07, 0.15 + u * 0.20 + 0.05), (0.004, 0.012, 0.012))
-        leds.build(f"Rack_{i + 1}_LEDs", mats["led_green"], root)
+        n_mod = 6 if i < 2 else 4
+        for u in range(n_mod):
+            zc = 0.35 + u * 0.27
+            front.box((-d / 2 - 0.004, y, zc), (0.008, w - 0.12, 0.22))
+            front.box((-d / 2 - 0.010, y - (w - 0.12) / 2 + 0.03, zc), (0.006, 0.02, 0.20))   # module handle strip
+            leds.box((-d / 2 - 0.012, y + 0.08, zc + 0.055), (0.004, 0.14, 0.035))             # red digit readout
+            leds.box((-d / 2 - 0.012, y - 0.05, zc - 0.06), (0.004, 0.012, 0.012))             # status LED
+        if i == 3:                                                                              # the UPS has a bigger display
+            leds.box((-d / 2 - 0.012, y, 1.55), (0.004, 0.22, 0.09))
+        front.build(f"Cabinet_{i + 1}_Modules", mats["module_grey"], root)
+        leds.build(f"Cabinet_{i + 1}_LEDs", mats["led_red_digits"], root)
+        door = MeshBuilder().box((-d / 2 - 0.02, y, h / 2), (0.006, w - 0.05, h - 0.10))
+        door.build(f"Cabinet_{i + 1}_GlassDoor", mats["glass"], root)
+        frame = MeshBuilder()
+        for dy in (-(w - 0.05) / 2, (w - 0.05) / 2):
+            frame.box((-d / 2 - 0.02, y + dy, h / 2), (0.02, 0.03, h - 0.10))
+        for dz in (0.05, h - 0.05):
+            frame.box((-d / 2 - 0.02, y, dz), (0.02, w - 0.05, 0.03))
+        frame.build(f"Cabinet_{i + 1}_DoorFrame", mats["cabinet"], root)
+    # Cable tray above the row feeding the cabinets.
+    tray = MeshBuilder().box((0.0, direction * (count - 1) * spacing / 2, h + 0.30), (0.30, count * spacing, 0.10))
+    tray.build("Cabinet_CableTray", mats["conduit"], root)
+    return root
+
+
+def build_diag_bench(parent, mats, origin):
+    """Diagnostics bench against the south wall: a blue-legged table with three monitors, a wall monitor,
+    a small instrument rack and a whiteboard. The table runs along X; the analyst sits on the north side."""
+    ox, oy, oz = origin
+    root = empty("DiagBench", (ox, oy, oz), parent)
+    length, depth, h = 2.4, 0.76, 0.74
+    top = MeshBuilder().box((0, 0, h - 0.015), (length, depth, 0.03))
+    top.build("DiagBench_Top", mats["table_top"], root)
+    legs = MeshBuilder()
+    for dx in (-length / 2 + 0.06, length / 2 - 0.06):
+        for dy in (-depth / 2 + 0.06, depth / 2 - 0.06):
+            legs.box((dx, dy, (h - 0.03) / 2), (0.05, 0.05, h - 0.03))
+        legs.box((dx, 0, h - 0.08), (0.05, depth - 0.12, 0.05))
+    legs.build("DiagBench_Legs", mats["table_blue"], root)
+    # Three monitors on the bench, screens facing -Y (towards the analyst), built along X then rotated.
+    mon = empty("DiagBench_Monitors", (0, 0, 0), root)
+    mon.rotation_euler = (0, 0, -math.pi / 2)       # local (x, y) -> world (y, -x): screens (local -X) face world +Y
+    for i, dx in enumerate((-0.75, 0.0, 0.75)):
+        _monitor(mon, mats, f"DiagBench_Monitor_{i + 1}", 0.30, dx, h, w=0.52, h=0.30)
+    for i, dx in enumerate((-0.75, 0.0, 0.75)):
+        box(f"DiagBench_Keyboard_{i + 1}", (dx, -0.12, h + 0.01), (0.42, 0.14, 0.02), mats["panel"], root)
+    box("DiagBench_Laptop", (1.0, 0.05, h + 0.012), (0.32, 0.22, 0.02), mats["panel"], root)
+    # Small instrument rack at the west end of the bench and a wall monitor + whiteboard on the wall behind.
+    rk = MeshBuilder().box((-length / 2 - 0.35, 0.0, 0.60), (0.50, 0.55, 1.20))
+    rk.build("DiagBench_Rack", mats["rack"], root)
+    rkm = MeshBuilder()
+    for u in range(4):
+        rkm.box((-length / 2 - 0.35, -0.28, 0.20 + u * 0.26), (0.46, 0.008, 0.20))
+    rkm.build("DiagBench_Rack_Modules", mats["rack_front"], root)
+    wall_y = D.ROOM_Y[0]
+    dy = wall_y - oy
+    wm = empty("DiagBench_WallMonitor", (0, 0, 0), root)
+    wm.rotation_euler = (0, 0, -math.pi / 2)
+    _monitor(wm, mats, "DiagBench_WallMonitor_1", -dy - 0.02, -0.3, 1.45, w=1.10, h=0.62, stand=False)
+    box("Whiteboard", (1.1, dy + 0.02, 1.55), (1.2, 0.02, 0.9), mats["whiteboard"], root)
+    box("Whiteboard_Tray", (1.1, dy + 0.04, 1.10), (1.2, 0.05, 0.02), mats["conduit"], root)
+    _chair(root, mats, (0.0, 0.75, 0), "DiagBench_Chair", facing=-math.pi / 2)
     return root
 
 
 def build_control_room(parent, mats):
-    """Console + video wall + racks at their positions in the hall frame (pool centre = origin)."""
+    """Console + video wall + cabinets + diagnostics bench in the hall frame (pool centre = origin)."""
     out = {}
     out["console"] = build_console(parent, mats, D.CONSOLE_POS)
     wall_inner_x = D.ROOM_X[1]
     out["video_wall"] = build_video_wall(parent, mats, wall_inner_x, D.CONSOLE_POS[1], D.VIDEO_WALL_CENTER_Z)
-    d, w, h = D.RACK_SIZE
-    out["racks"] = build_racks(parent, mats, (wall_inner_x - d / 2 - 0.05, 3.3, 0.0), D.RACK_COUNT)
+    d, w, h = D.CABINET_SIZE
+    out["cabinets"] = build_cabinets(parent, mats, (wall_inner_x - d / 2 - 0.05, D.CABINET_FIRST_Y, 0.0), D.CABINET_COUNT)
+    out["diag_bench"] = build_diag_bench(parent, mats, D.DIAG_BENCH_POS)
     return out
 
 
 def build_standalone_scene(mats):
-    """Floor slab and east wall only, so control_room.glb is self-contained."""
+    """Floor slab, east and south walls only, so control_room.glb is self-contained."""
     root = empty("ControlRoom")
     x0, x1 = D.CONSOLE_POS[0] - 3.0, D.ROOM_X[1]
-    y0, y1 = -3.5, 6.0
+    y0, y1 = D.ROOM_Y[0], 6.0
     floor = MeshBuilder().box_minmax((x0, y0, -0.05), (x1, y1, 0.0))
     floor.build("Floor", mats["floor"], root)
     wall = MeshBuilder().box_minmax((x1, y0, 0.0), (x1 + D.WALL_T, y1, 4.5))
-    wall.build("Wall_East", mats["concrete_block"], root)
+    wall.box_minmax((x0, y0 - D.WALL_T, 0.0), (x1, y0, 4.5))
+    wall.build("Walls", mats["wall_cream"], root)
     build_control_room(root, mats)
     return root

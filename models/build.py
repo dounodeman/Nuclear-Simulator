@@ -91,11 +91,11 @@ TARGETS = {"reactor_hall": build_reactor_hall, "control_room": build_control_roo
 
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("targets", nargs="*", default=list(TARGETS), choices=list(TARGETS))
+    ap.add_argument("targets", nargs="*", choices=list(TARGETS))
     ap.add_argument("--render", action="store_true", help="render preview PNGs (slow without a GPU)")
     ap.add_argument("--quality", type=int, default=24, help="EEVEE samples for renders")
     args = ap.parse_args(argv)
-    for t in args.targets:
+    for t in (args.targets or list(TARGETS)):
         print(f"== building {t}")
         TARGETS[t](args.render, args.quality)
 

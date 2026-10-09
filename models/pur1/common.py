@@ -82,7 +82,24 @@ def palette() -> dict[str, bpy.types.Material]:
     return {
         "concrete": material("Concrete", (0.62, 0.61, 0.58), rough=0.95),
         "concrete_block": material("ConcreteBlock", (0.78, 0.77, 0.72), rough=0.95),
-        "floor": material("FloorEpoxy", (0.45, 0.47, 0.50), rough=0.35),
+        "wall_cream": material("WallCream", (0.88, 0.84, 0.70), rough=0.9),
+        "floor": material("FloorEpoxy", (0.70, 0.71, 0.70), rough=0.35),
+        "floor_stripe": material("FloorStripeYellow", (0.98, 0.80, 0.08), rough=0.4),
+        "carpet": material("CarpetMat", (0.22, 0.22, 0.24), rough=1.0),
+        "pool_black": material("PoolWallBlack", (0.03, 0.03, 0.035), rough=0.45),
+        "pool_lip": material("PoolLipGrey", (0.62, 0.64, 0.65), rough=0.5, metal=0.3),
+        "lettering_white": material("LetteringWhite", (0.95, 0.95, 0.93), rough=0.5),
+        "lettering_gold": material("LetteringGold", (0.95, 0.72, 0.10), rough=0.5),
+        "desk_black": material("DeskBlack", (0.06, 0.06, 0.07), rough=0.45),
+        "chair_blue": material("ChairBlue", (0.12, 0.28, 0.58), rough=0.9),
+        "cabinet": material("CabinetBlack", (0.05, 0.05, 0.06), rough=0.4, metal=0.3),
+        "module_grey": material("ModuleGrey", (0.72, 0.73, 0.72), rough=0.5, metal=0.2),
+        "led_red_digits": material("LEDRedDigits", (0.6, 0.02, 0.02), emit=(1.0, 0.05, 0.02), emit_strength=6.0),
+        "pipe_green": material("PipeGreen", (0.25, 0.55, 0.35), rough=0.5, metal=0.2),
+        "conduit": material("Conduit", (0.75, 0.75, 0.73), rough=0.4, metal=0.5),
+        "table_blue": material("TableBlueLegs", (0.20, 0.35, 0.60), rough=0.5, metal=0.3),
+        "table_top": material("TableTopWhite", (0.90, 0.90, 0.88), rough=0.5),
+        "whiteboard": material("Whiteboard", (0.97, 0.97, 0.97), rough=0.3),
         "ceiling": material("Ceiling", (0.85, 0.85, 0.83), rough=0.9),
         "steel": material("SteelPainted", (0.55, 0.58, 0.60), rough=0.5, metal=0.3),
         "steel_yellow": material("SteelSafetyYellow", (0.95, 0.75, 0.10), rough=0.5, metal=0.2),
@@ -91,7 +108,7 @@ def palette() -> dict[str, bpy.types.Material]:
         "aluminum_dark": material("AluminumAnodised", (0.55, 0.56, 0.58), rough=0.45, metal=0.7),
         "graphite": material("Graphite", (0.18, 0.18, 0.19), rough=0.8),
         "borated_ss": material("BoratedSS", (0.45, 0.47, 0.50), rough=0.4, metal=0.8),
-        "water": material("PoolWater", (0.10, 0.45, 0.75), rough=0.05, alpha=0.30),
+        "water": material("PoolWater", (0.04, 0.18, 0.28), rough=0.05, alpha=0.72),
         "cherenkov": material("Cherenkov", (0.2, 0.5, 1.0), alpha=0.35, emit=(0.25, 0.55, 1.0), emit_strength=8.0),
         "pvc": material("PVCWhite", (0.92, 0.92, 0.90), rough=0.5),
         "door": material("DoorGrey", (0.50, 0.52, 0.55), rough=0.6, metal=0.2),
@@ -107,7 +124,7 @@ def palette() -> dict[str, bpy.types.Material]:
         "button_black": material("ButtonBlack", (0.08, 0.08, 0.08), rough=0.4),
         "button_amber": material("ButtonAmber", (0.95, 0.65, 0.10), rough=0.4),
         "lamp": material("Lamp", (1.0, 1.0, 1.0), emit=(1.0, 1.0, 0.95), emit_strength=5.0),
-        "chair": material("ChairFabric", (0.15, 0.16, 0.20), rough=0.9),
+        "chair": material("ChairFabric", (0.12, 0.28, 0.58), rough=0.9),
         "rack": material("Rack", (0.18, 0.19, 0.21), rough=0.5, metal=0.3),
         "rack_front": material("RackFront", (0.35, 0.36, 0.38), rough=0.5, metal=0.4),
         "led_green": material("LEDGreen", (0.1, 1.0, 0.2), emit=(0.1, 1.0, 0.2), emit_strength=4.0),
@@ -212,6 +229,45 @@ class MeshBuilder:
                 faces.append((i * sides + k, j * sides + k, j * sides + l, i * sides + l))
         return self._add(verts, faces, smooth=True)
 
+    def sweep(self, points, radius, sides=10):
+        """Tube of `radius` along a polyline (cables, pipes, conduit, handrails)."""
+        import mathutils
+        pts = [mathutils.Vector(p) for p in points]
+        if len(pts) < 2:
+            return self
+        rings = []
+        for i, p in enumerate(pts):
+            t_in = (pts[i] - pts[i - 1]).normalized() if i > 0 else None
+            t_out = (pts[i + 1] - pts[i]).normalized() if i < len(pts) - 1 else None
+            t = (t_in + t_out).normalized() if (t_in and t_out and (t_in + t_out).length > 1e-6) else (t_out or t_in)
+            up = mathutils.Vector((0, 0, 1)) if abs(t.z) < 0.9 else mathutils.Vector((1, 0, 0))
+            n1 = t.cross(up).normalized()
+            n2 = t.cross(n1).normalized()
+            rings.append([tuple(p + radius * (math.cos(a) * n1 + math.sin(a) * n2))
+                          for a in (2 * math.pi * k / sides for k in range(sides))])
+        base = len(self.verts)
+        for r in rings:
+            self.verts.extend(r)
+        for i in range(len(rings) - 1):
+            for k in range(sides):
+                l = (k + 1) % sides
+                a, b = base + i * sides, base + (i + 1) * sides
+                self.faces.append((a + k, a + l, b + l, b + k))
+                self.smooth.append(True)
+        self.faces.append(tuple(reversed(range(base, base + sides))))
+        self.smooth.append(False)
+        e = base + (len(rings) - 1) * sides
+        self.faces.append(tuple(range(e, e + sides)))
+        self.smooth.append(False)
+        return self
+
+    def arc_sweep(self, center, radius, z, a0, a1, tube_radius, segments=24, sides=10):
+        """Horizontal arc of a tube around `center` (handrails, the pool's striping)."""
+        cx, cy = center
+        pts = [(cx + radius * math.cos(a0 + (a1 - a0) * i / segments), cy + radius * math.sin(a0 + (a1 - a0) * i / segments), z)
+               for i in range(segments + 1)]
+        return self.sweep(pts, tube_radius, sides)
+
     def build(self, name: str, mat: bpy.types.Material | None = None, parent=None, location=(0, 0, 0)) -> bpy.types.Object:
         mesh = bpy.data.meshes.new(name)
         mesh.from_pydata(self.verts, [], self.faces)
@@ -226,6 +282,39 @@ class MeshBuilder:
         ob.parent = parent
         bpy.context.scene.collection.objects.link(ob)
         return ob
+
+
+def curved_text(name, text, mat, radius, center_angle, z_center, size, depth=0.006, parent=None, bold=True):
+    """Lettering wrapped around a vertical cylinder of `radius` about the origin, facing outward,
+    centred at `center_angle` (radians) and height `z_center`. Built from Blender's default font."""
+    import mathutils
+    curve = bpy.data.curves.new(name + "_curve", "FONT")
+    curve.body = text
+    curve.size = size
+    curve.extrude = depth / 2
+    curve.align_x = "CENTER"
+    curve.align_y = "CENTER"
+    if bold:
+        curve.font_bold = curve.font
+        curve.body_format[0].use_bold = False
+    tmp = bpy.data.objects.new(name + "_tmp", curve)
+    bpy.context.scene.collection.objects.link(tmp)
+    dg = bpy.context.evaluated_depsgraph_get()
+    mesh = bpy.data.meshes.new_from_object(tmp.evaluated_get(dg))
+    bpy.data.objects.remove(tmp, do_unlink=True)
+    bpy.data.curves.remove(curve)
+    for v in mesh.vertices:
+        x, y, zz = v.co
+        a = center_angle + x / radius
+        r = radius + zz + depth / 2
+        v.co = mathutils.Vector((r * math.cos(a), r * math.sin(a), z_center + y))
+    mesh.validate()
+    mesh.update()
+    mesh.materials.append(mat)
+    ob = bpy.data.objects.new(name, mesh)
+    ob.parent = parent
+    bpy.context.scene.collection.objects.link(ob)
+    return ob
 
 
 def box(name, center, size, mat, parent=None):
