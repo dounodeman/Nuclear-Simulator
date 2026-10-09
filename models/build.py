@@ -39,12 +39,10 @@ def build_reactor_hall(do_render: bool, quality: int):
     if do_render:
         cam = add_camera("Cam_Overview", (-4.4, -5.4, 5.2), (2.5, 0.5, 0.8), lens=22)
         render(os.path.join(RENDERS, "reactor_hall_overview.png"), cam, samples=quality)
-        cam = add_camera("Cam_PoolTop", (0.0, -3.4, 3.4), (0.0, 0.3, -3.0), lens=28)
+        cam = add_camera("Cam_PoolTop", (0.6, -2.6, 5.0), (0.0, 0.2, -3.5), lens=24)
         render(os.path.join(RENDERS, "reactor_hall_pool_top.png"), cam, samples=quality)
         cam = add_camera("Cam_Console", (2.6, -3.2, 2.1), (6.8, 0.3, 1.5), lens=24)
         render(os.path.join(RENDERS, "reactor_hall_console.png"), cam, samples=quality)
-        cam = add_camera("Cam_Section", (-9.5, -9.5, 2.0), (0.0, 0.0, -1.5), lens=30)
-        render(os.path.join(RENDERS, "reactor_hall_from_southwest.png"), cam, samples=quality)
 
 
 def build_control_room(do_render: bool, quality: int):
