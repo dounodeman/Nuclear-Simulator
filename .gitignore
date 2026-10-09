@@ -6,3 +6,5 @@ build/
 dist/
 *.csv
 /*.png
+packaging/macos/icon.png
+packaging/macos/icon.icns

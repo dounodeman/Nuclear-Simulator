@@ -47,6 +47,41 @@ sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
 ```
 
+## Control room (Mac app)
+
+![Control room after a scram](docs/img/control_room.png)
+
+A live operator console: the four neutron channels, rod drives you hold to move, the
+servo, the startup source, the scram button, annunciators, a power history, pool and
+radiation readings, an event log and a 3D view of the core whose blades move with the
+rods. An instructor drawer injects experiments, rod and instrument faults, a chiller
+trip, a pool leak and protection-system failures. Plant time runs at 1x to 100x.
+
+**Install the app.** Every merge to `main` that touches the simulator builds
+`PUR-1 Simulator.app` for Apple silicon and publishes it on the repository's
+[Releases](../../releases) page as `PUR-1-Simulator-macOS.zip`.
+
+1. Download the zip from the latest release, unzip it and drag the app to Applications.
+2. The app is not signed with an Apple developer certificate, so macOS blocks the first
+   launch. Open it once, then go to System Settings > Privacy & Security and click
+   **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/PUR-1 Simulator.app"`).
+3. In the app, click **Updates** and paste a GitHub fine-grained token with read-only
+   *Contents* access to this repository. The repository is private, so the app needs it to
+   see new builds. It is stored only on that Mac.
+
+From then on the app checks for a newer build when it opens, and **Install and restart**
+downloads it, swaps it in place and relaunches.
+
+**Run it from source** (any OS):
+
+```bash
+pip install -e .[app]        # pywebview gives it its own window; without it, it opens in the browser
+python -m reactorsim app     # or: python -m reactorsim app --browser --initial power_10kw
+```
+
+Build the app yourself on a Mac with `pip install ".[mac]"`,
+`python packaging/macos/make_icon.py` and `pyinstaller packaging/macos/pur1.spec`.
+
 ## 3D models
 
 Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area,
@@ -98,6 +133,8 @@ reactorsim/
   reactors/    one module per reactor design (pur1.py)
   simulator.py the control loop and operator actions
   scenarios.py scripted operations and accidents
+  app/         control room: live session, local server, web page, updater
+packaging/     Mac app build (PyInstaller)
 tests/         validation tests
 docs/          reference data and plots
 ```
@@ -111,4 +148,4 @@ beside the current lumped models.
 1. PUR-1 reference data (done; open questions in the reference doc)
 2. Core physics engine with validation (this release)
 3. Control system detail and a fuller accident set
-4. Control-room operator interface on top of the engine
+4. Control-room operator interface on top of the engine (first version: the Mac app)
