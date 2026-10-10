@@ -15,7 +15,24 @@
   --rod-rr: #c084fc;
   --mono: "SF Mono", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  color-scheme: dark;
+  /* The plant HMI look (late-1990s Windows NT operator displays), shared by the workstations,
+     the menu, the instructor station, dialogs and the HUD. */
+  --hmi-face: #d4d0c8;       /* 3D face of chrome and buttons */
+  --hmi-light: #ffffff;
+  --hmi-shadow: #808080;
+  --hmi-dark: #404040;
+  --hmi-field: #ffffff;
+  --hmi-ground: #e8e6df;     /* panel background */
+  --hmi-text: #000000;
+  --hmi-label: #303030;
+  --hmi-navy: #0a246a;
+  --hmi-blue: #1c4fa0;
+  --hmi-amber: #ffc000;
+  --hmi-red: #e00000;
+  --hmi-green: #00a000;
+  --hmi-font: Tahoma, Verdana, "Segoe UI", Geneva, Arial, sans-serif;
+  --hmi-mono: "Lucida Console", "Courier New", Monaco, monospace;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -37,20 +54,28 @@ h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: v
 .spacer { flex: 1; }
 
 button, select, input {
-  font: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 10px;
+  font: 12px var(--hmi-font);
+  color: var(--hmi-text);
+  border-radius: 0;
 }
-button { cursor: pointer; }
-button:hover { border-color: #3a4a60; }
-button:active { transform: translateY(1px); }
-button:disabled { opacity: .45; cursor: default; }
-button.ghost { background: transparent; }
-button.toggle.on, .seg button.on, .speed button.on { background: #12324a; border-color: var(--accent); color: #e6f6ff; }
-input[type=number] { width: 90px; font-family: var(--mono); }
+button {
+  cursor: pointer; background: var(--hmi-face); padding: 3px 10px;
+  border: 1px solid; border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light);
+  box-shadow: inset -1px -1px 0 var(--hmi-shadow), inset 1px 1px 0 #ece9e2;
+}
+button:active, button.held, button.toggle.on, .seg button.on, .speed button.on {
+  border-color: var(--hmi-dark) var(--hmi-light) var(--hmi-light) var(--hmi-dark);
+  box-shadow: inset 1px 1px 0 var(--hmi-shadow);
+}
+button.toggle.on, .seg button.on, .speed button.on { background: #c3d7f0; color: var(--hmi-navy); font-weight: bold; }
+button:disabled { color: var(--hmi-shadow); text-shadow: 1px 1px 0 var(--hmi-light); cursor: default; }
+button:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+select, input {
+  background: var(--hmi-field); padding: 2px 4px;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+input[type=number] { width: 90px; font-family: var(--hmi-mono); }
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -67,16 +92,18 @@ input[type=number] { width: 90px; font-family: var(--mono); }
 .clock .label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .1em; }
 .clock .digits { font-size: 18px; }
 .speed { display: flex; }
-.speed button { border-radius: 0; margin-left: -1px; padding: 5px 9px; font-family: var(--mono); }
-.speed button:first-child { border-radius: 6px 0 0 6px; }
-.speed button:last-child { border-radius: 0 6px 6px 0; }
+.speed button { padding: 3px 8px; font-family: var(--hmi-mono); }
 .actions { display: flex; gap: 6px; align-items: center; }
 .actions button { white-space: nowrap; }
 #initial { max-width: 210px; }
-#updateBtn.has-update { border-color: var(--ok); color: var(--ok); }
+#updateBtn.has-update { color: var(--hmi-green); font-weight: bold; }
 
-.banner { padding: 8px 16px; background: #3b1114; color: #ffd7d7; border-bottom: 1px solid #6b1d22; }
-.banner.info { background: #10293a; color: #cdeaff; border-color: #1f4b66; }
+/* A message bar like a lit annunciator window: red for trips, navy for information. */
+.banner {
+  padding: 4px 14px; background: var(--hmi-red); color: #fff; font: bold 12px var(--hmi-font);
+  border: 2px solid; border-color: #ff8080 #700000 #700000 #ff8080;
+}
+.banner.info { background: var(--hmi-navy); border-color: #6080c0 #000830 #000830 #6080c0; }
 
 /* ---------- annunciators ---------- */
 .annunciators {
@@ -198,24 +225,28 @@ button.scram:active { transform: scale(.97); }
 
 /* ---------- instructor drawer ---------- */
 .drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%;
-  background: #0f151d; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; z-index: 10;
-  box-shadow: -10px 0 30px rgba(0,0,0,.5);
+  position: fixed; top: 8px; right: 8px; bottom: 8px; width: 420px; max-width: calc(100% - 16px);
+  overflow-y: auto; z-index: 10; display: flex; flex-direction: column;
 }
-.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer[hidden] { display: none; }
+.drawer .win-body { overflow-y: auto; }
 .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .form-row label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
 .form-row .check input { width: auto; }
 
 /* ---------- dialog / toast ---------- */
-dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; width: min(560px, 92vw); padding: 18px; }
-dialog::backdrop { background: rgba(0,0,0,.55); }
-.upd-msg { font-size: 14px; }
-.upd-notes { background: #0a0e13; border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 200px; overflow: auto; white-space: pre-wrap; font: 12px var(--mono); }
+dialog { width: min(560px, 92vw); padding: 0; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+.upd-msg { font-size: 12px; margin-top: 0; }
+.upd-notes { max-height: 200px; overflow: auto; white-space: pre-wrap; margin: 0; }
 .token-row { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .token-row input { width: 100%; font-family: var(--mono); }
 .dlg-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #3b1114; color: #ffd7d7; border: 1px solid #6b1d22; padding: 8px 14px; border-radius: 8px; z-index: 20; max-width: 80vw; }
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 20; max-width: 80vw;
+  background: #ffffe1; color: #000; border: 1px solid #000; padding: 3px 8px; font: 12px var(--hmi-font);
+  box-shadow: 2px 2px 0 rgba(0,0,0,.35);
+}
 
 /* ======================================================================
    Walkable hall: the world fills the window; panels live on workstations
@@ -227,34 +258,75 @@ body.looking .world canvas { cursor: none; }
 
 .hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
 .hud-top {
-  position: absolute; top: 12px; left: 14px; display: flex; gap: 12px; align-items: baseline;
-  background: rgba(8, 12, 17, .72); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
+  position: absolute; top: 12px; left: 14px; display: flex; gap: 4px; align-items: center;
+  background: var(--hmi-face); padding: 3px;
+  border: 1px solid; border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light);
+  box-shadow: inset -1px -1px 0 var(--hmi-shadow);
 }
-.hud-top .mark, .menu-title .mark { font: 700 16px var(--mono); letter-spacing: .06em; color: var(--accent); }
-.hud-top #clock { font-size: 16px; }
-.speed-tag { font: 12px var(--mono); color: var(--muted); }
-.speed-tag.paused { color: var(--warn); }
-.hud .banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: 60vw; border-radius: 8px; border: 1px solid #6b1d22; }
+.hud-top .mark { font: bold 12px var(--hmi-font); color: var(--hmi-navy); padding: 0 4px; }
+.hud-top .field, .win .field {
+  font: 12px var(--hmi-mono); color: #000; background: var(--hmi-field); padding: 1px 6px;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+}
+.speed-tag.paused { background: var(--hmi-amber); }
+.hud .banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: 60vw; }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(0,0,0,.6); display: none; }
 body.looking .crosshair { display: block; }
 .prompt {
   position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%);
-  background: rgba(8, 12, 17, .82); border: 1px solid #2a3a4c; border-radius: 6px; padding: 5px 12px;
-  font: 13px var(--sans); color: #e6f6ff; white-space: nowrap;
+  background: #ffffe1; border: 1px solid #000; padding: 2px 8px; box-shadow: 2px 2px 0 rgba(0,0,0,.35);
+  font: 12px var(--hmi-font); color: #000; white-space: nowrap;
 }
-.hud-help { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: rgba(215,224,234,.6); font-size: 12px; text-shadow: 0 1px 2px #000; }
+.hud-help {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  background: var(--hmi-face); color: var(--hmi-label); font: 11px var(--hmi-font); padding: 1px 8px; opacity: .85;
+  border: 1px solid; border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light);
+}
 body.at-station .hud-help, body.at-station .crosshair, body.at-station .prompt { display: none; }
 
-.menu { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 12, .62); backdrop-filter: blur(3px); }
+.menu { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .35); }
 .menu[hidden] { display: none; }
-.menu-card { width: min(560px, 92vw); max-height: 92vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-.menu-title { display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
-.menu-lead { color: var(--text); margin: 10px 0 16px; }
-button.primary { background: #12324a; border-color: var(--accent); color: #e6f6ff; font-weight: 600; padding: 10px 18px; font-size: 14px; }
-.menu .speed button { padding: 6px 12px; }
-table.keys { border-collapse: collapse; width: 100%; font-size: 12px; }
-table.keys td { padding: 3px 0; border-bottom: 1px solid #18212c; }
-table.keys td:first-child { font-family: var(--mono); color: var(--accent); width: 38%; }
+.menu-card { width: min(340px, 92vw); max-height: 92vh; overflow-y: auto; }
+.menu-body { display: flex; flex-direction: column; gap: 6px; }
+.menu-body > button { width: 100%; padding: 4px 10px; }
+.menu-body .form-row { flex-wrap: nowrap; }
+.menu-body select { flex: 1; width: 0; min-width: 0; }
+.menu .speed { gap: 2px; }
+.menu .speed button { flex: 1; padding: 3px 0; }
+button.primary { font-weight: bold; padding: 6px 10px; outline: 1px solid #000; outline-offset: 0; }
+
+/* ---------- windows: grey chrome, navy title bar, etched group boxes ---------- */
+.win {
+  background: var(--hmi-face); color: var(--hmi-text); font: 12px/1.35 var(--hmi-font); padding: 3px;
+  border: 1px solid; border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light);
+  box-shadow: inset -1px -1px 0 var(--hmi-shadow), inset 1px 1px 0 #ece9e2, 4px 4px 0 rgba(0,0,0,.35);
+}
+.win-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px;
+  padding: 2px 3px 2px 6px; background: linear-gradient(90deg, var(--hmi-navy), #a6caf0);
+  color: #fff; font: bold 12px var(--hmi-font);
+}
+.win-title button { padding: 0 6px; font-size: 11px; }
+.win-body { padding: 10px 8px 8px; }
+.win h2 { font: bold 11px var(--hmi-font); letter-spacing: 0; text-transform: none; color: var(--hmi-navy); margin: 0 0 6px; }
+.win h3 { font: bold 11px var(--hmi-font); letter-spacing: 0; text-transform: none; color: var(--hmi-navy); margin: 12px 0 4px; }
+.win .hint { color: var(--hmi-label); font-size: 11px; }
+.win .form-row label { color: var(--hmi-label); }
+.win fieldset.group, .win pre, .win .upd-notes { margin: 0; }
+fieldset.group {
+  min-width: 0; padding: 4px 8px 8px; border: 1px solid var(--hmi-shadow); box-shadow: inset 1px 1px 0 var(--hmi-light), 1px 1px 0 var(--hmi-light);
+}
+fieldset.group legend { padding: 0 3px; color: var(--hmi-navy); font-weight: bold; font-size: 11px; }
+.win pre, .win .upd-notes {
+  background: var(--hmi-field); padding: 4px; font: 11px var(--hmi-mono);
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.win-status { display: flex; margin-top: 2px; font: 11px var(--hmi-font); color: var(--hmi-label); }
+.win-status span {
+  flex: 1; padding: 1px 6px;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+}
 
 /* A workstation opens as a monitor in front of the operator. */
 .station { position: fixed; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 9, .55); padding: 2.5vh 2vw; }
@@ -285,25 +357,10 @@ table.keys td:first-child { font-family: var(--mono); color: var(--accent); widt
    Workstation screens: a light, older plant HMI (late-1990s Windows NT
    operator displays): grey window chrome with a navy title bar, etched
    group boxes, sunken white value fields, bevelled push buttons and
-   segmented bar graphs. Scoped to .station so the hall's menus keep the
-   dark game look.
+   segmented bar graphs. The colour tokens live on :root and the windows
+   above (menu, instructor station, dialogs) use the same chrome.
    ====================================================================== */
 .station {
-  --hmi-face: #d4d0c8;       /* 3D face of chrome and buttons */
-  --hmi-light: #ffffff;
-  --hmi-shadow: #808080;
-  --hmi-dark: #404040;
-  --hmi-field: #ffffff;
-  --hmi-ground: #e8e6df;     /* panel background */
-  --hmi-text: #000000;
-  --hmi-label: #303030;
-  --hmi-navy: #0a246a;
-  --hmi-blue: #1c4fa0;
-  --hmi-amber: #ffc000;
-  --hmi-red: #e00000;
-  --hmi-green: #00a000;
-  --hmi-font: Tahoma, Verdana, "Segoe UI", Geneva, Arial, sans-serif;
-  --hmi-mono: "Lucida Console", "Courier New", Monaco, monospace;
   /* trend colours read by drawTrend() */
   --trend-bg: #ffffff;
   --trend-grid: #c8c8c8;

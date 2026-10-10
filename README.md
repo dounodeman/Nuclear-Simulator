@@ -64,7 +64,7 @@ video wall is on the right. Walk around it in first person
 (WASD, Shift to run, mouse to look), climb the stair for a view down into the pool, and operate
 the reactor from the console:
 
-The workstations look like the plant's own late-1990s operator displays: grey window chrome,
+The workstations, the menu and every other window look like the plant's own late-1990s operator displays: grey window chrome,
 navy title bars, etched group boxes and white value fields.
 
 - **Workstation 1, reactor control** (left-hand monitor): the four neutron channels, rod
