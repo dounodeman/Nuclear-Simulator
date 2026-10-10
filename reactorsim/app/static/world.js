@@ -8,6 +8,7 @@
 // annunciators, the I&C cabinet readouts and the video wall show the live plant.
 import * as THREE from "three";
 import { GLTFLoader } from "./vendor/three/loaders/GLTFLoader.js";
+import { applySurfaces } from "./textures.js";
 
 const EYE = 1.65;          // eye height above the floor, m
 const RADIUS = 0.28;       // body radius for collisions, m
@@ -47,6 +48,9 @@ const LABELS = {
   Stair_North: ["info", null, "Stair to the north platform"],
   Graphic_PUR1: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
   Graphic_Tagline: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
+  Graphic_150_150: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
+  Graphic_150_GIANT: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
+  Graphic_150_LEAPS: ["info", null, "PUR-1: the nation's first all-digital I&C research reactor"],
   Chiller_36kBtu: ["info", null, "Pool chiller, 36 kBtu/h"],
   IonExchanger_MixedBed: ["info", null, "Mixed-bed ion exchanger"],
   Pump_30gpm: ["info", null, "Primary purification pump, 30 gpm"],
@@ -55,11 +59,51 @@ const LABELS = {
   RAM_Console: ["info", null, "Area radiation monitor: console"],
   RAM_WaterProcess: ["info", null, "Area radiation monitor: water process"],
   Bridge_Structure: ["info", null, "Reactor bridge with the five drives"],
+  Bridge_Frame: ["info", null, "Reactor bridge with the five drives"],
+  Bridge_Grating: ["info", null, "Bridge grating over the pool (the core opening is in the middle)"],
+  Drive_Cage: ["info", null, "Drive cage over the core"],
+  Drive_SS1: ["info", null, "SS1 drive: stepper motor, magnet and drive tube"],
+  Drive_SS2: ["info", null, "SS2 drive: stepper motor, magnet and drive tube"],
+  Drive_RR: ["info", null, "RR drive: stepper motor, magnet and drive tube"],
+  Drive_NS: ["info", null, "Neutron source drive"],
+  Drive_FC: ["info", null, "Fission chamber drive"],
+  PoolExhaust_Duct: ["info", null, "Pool-top exhaust duct"],
+  Door_Main_South: ["info", null, "Main door to the corridor"],
+  Door_West: ["info", null, "West door"],
+  Door_North: ["info", null, "North door"],
+  Door_StorageRoom_North: ["info", null, "Storage room"],
 };
+// The parts of each keyboard, mouse and trackball work like the device itself.
+for (const [part, of] of [["Keyboard_Keys", "Keyboard"], ["Trackball_Ball", "Trackball"],
+  ["Trackball_Buttons", "Trackball"], ["Keyboard_2_Keys", "Keyboard_2"], ["Mouse_Pad", "Mouse"],
+  ["Mouse_ButtonSplit", "Mouse"], ["Keyboard_3_Keys", "Keyboard_3"]]) LABELS[part] = LABELS[of];
+// Thin overhead and wall-mounted detail that should not stop the walker.
+const NO_COLLIDE = ["Ceiling", "HVAC_Ducts", "LightFixtures", "Conduit", "MonorailHoist", "Cabinet_CableTray",
+  "PipeBrackets", "ProcessPiping_Hangers", "PoolExhaust_Duct", "DriveCables", "DriveCable_Yellow",
+  "Mouse_Cable", "DiagBench_Mouse_Cable"];
 
 const ANNUNCIATOR_KEYS = ["scram", "setback", "interlock", "period", "power", "chan",
   "pooltemp", "poollevel", "rad", "servo", "source", "rps"];
 const ANN_COLORS = { alarm: 0xff3b30, warn: 0xffb020, ok: 0x30d158 };
+
+function hallEnvironment(renderer) {
+  // A rough stand-in for the hall seen from the middle of it (cream walls, a grey floor and rows
+  // of bright ceiling fixtures), prefiltered for image-based lighting. Without it the stainless
+  // and aluminium have nothing to reflect and render nearly black.
+  const env = new THREE.Scene();
+  const box = (w, h, d, color, x, y, z, side = THREE.FrontSide) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color, side }));
+    m.position.set(x, y, z);
+    env.add(m);
+  };
+  box(20, 8, 16, 0x6e6a60, 0, 3, 0, THREE.BackSide);
+  box(19.8, 0.1, 15.8, 0x5a5a5a, 0, -0.95, 0);
+  for (const x of [-6, -2, 2, 6]) for (const z of [-4, 0, 4]) box(1.2, 0.05, 0.3, new THREE.Color(6, 6, 5.6), x, 6.9, z);
+  const pm = new THREE.PMREMGenerator(renderer);
+  const tex = pm.fromScene(env, 0.04).texture;
+  pm.dispose();
+  return tex;
+}
 
 export class HallWorld {
   constructor(el, hooks) {
@@ -78,7 +122,8 @@ export class HallWorld {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80);
     this.camera.rotation.order = "YXZ";
 
-    this.scene.add(new THREE.HemisphereLight(0xf4f6ff, 0x3a3f48, 1.1));
+    this.scene.environment = hallEnvironment(this.renderer);   // reflections for the metal
+    this.scene.add(new THREE.HemisphereLight(0xf4f6ff, 0x3a3f48, 0.6));
     const sun = new THREE.DirectionalLight(0xffffff, 0.9);
     sun.position.set(2, 6.5, 1);
     this.scene.add(sun);
@@ -90,6 +135,9 @@ export class HallWorld {
     this.glowLight = new THREE.PointLight(0x4fc3f7, 0, 6, 1.5);
     this.glowLight.position.set(0, -3.9, 0);
     this.scene.add(this.glowLight);
+    this.poolLamp = new THREE.PointLight(0xe6f6ff, 0, 5, 1.2);  // lit only for the core camera
+    this.poolLamp.position.set(0.7, -2.0, -0.6);
+    this.scene.add(this.poolLamp);
 
     this.pos = new THREE.Vector3(SPAWN.x, 0, SPAWN.z);  // feet
     this.yaw = SPAWN.yaw;
@@ -121,11 +169,12 @@ export class HallWorld {
     this.root = gltf.scene;
     this.scene.add(this.root);
     this.root.updateMatrixWorld(true);
+    applySurfaces(this.root);   // block walls, epoxy floor, fabric, brushed steel, ... (textures.js)
 
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       const name = this._named(o);
-      if (!name.startsWith("fx_") && !["Ceiling", "HVAC_Ducts", "LightFixtures", "Conduit", "MonorailHoist", "Cabinet_CableTray"].includes(name)) {
+      if (!name.startsWith("fx_") && !NO_COLLIDE.includes(name)) {
         this.colliders.push(o);
       }
       const rod = /^ui_Rod_(SS1|SS2|RR)$/.exec(name);
@@ -166,9 +215,96 @@ export class HallWorld {
       const ca = centre(a), cb = centre(b);
       return Math.abs(ca.y - cb.y) > 0.2 ? cb.y - ca.y : ca.z - cb.z;
     });
-    this.wall = tiles.map((t) => this._screen(t.name, 512, 288, t));
+    // Columns 2 and 3 show the underwater core camera as one picture; row 2 of column 4 shows a
+    // camera looking down the hall. The other tiles are drawn (see WALL).
+    this.feedEvery = [100, 400];   // ms between frames of the core camera and the hall camera
+    this.wall = tiles.map((t, i) => (tiles.length !== 12 || (i % 4 !== 1 && i % 4 !== 2 && i !== 7)
+      ? this._screen(t.name, 512, 288, t) : null));
+    if (tiles.length === 12) {
+      const coreCam = new THREE.PerspectiveCamera(60, 1, 0.05, 8);
+      coreCam.position.set(0.9, -2.55, 0.35);   // off to the side of the core, looking down at it
+      coreCam.lookAt(0, -3.9, 0);
+      this.coreFeed = this._feed(tiles.filter((_, i) => i % 4 === 1 || i % 4 === 2), coreCam, 1024, 864, true);
+      const hallCam = new THREE.PerspectiveCamera(66, 1, 0.1, 40);   // high in the south-east corner
+      hallCam.position.set(8.3, 5.0, 5.3);
+      hallCam.lookAt(0, 0.6, -0.6);
+      this.hallFeed = this._feed([tiles[7]], hallCam, 512, 288, false);
+    }
+    // Underwater look for the core camera: blue haze and a lamp in the pool, used only while
+    // that view renders (intensity, not visibility, so the shaders keep the same light count).
+    this.underFog = new THREE.FogExp2(0x0e5c96, 0.3);
+    this.underBg = new THREE.Color(0x072a40);
+    this.water = this.root.getObjectByName("fx_PoolWater");
 
     this.renderer.setAnimationLoop(() => this._frame());
+  }
+
+  _feed(tiles, cam, w, h, under) {
+    // A live camera picture spread across one or more wall tiles, with an on-screen display
+    // drawn on a transparent overlay just in front.
+    const rt = new THREE.WebGLRenderTarget(w, h);
+    cam.aspect = 1;
+    const meshes = tiles.map((t) => (t.isMesh ? t : t.getObjectByProperty("isMesh", true)));
+    const world = meshes.map((m) => {
+      const p = m.geometry.attributes.position, v = new THREE.Vector3(), pts = [];
+      for (let i = 0; i < p.count; i++) pts.push(v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld).clone());
+      return pts;
+    });
+    const all = world.flat();
+    const z0 = Math.min(...all.map((q) => q.z)), z1 = Math.max(...all.map((q) => q.z));
+    const y0 = Math.min(...all.map((q) => q.y)), y1 = Math.max(...all.map((q) => q.y));
+    const xf = Math.min(...all.map((q) => q.x));
+    cam.aspect = (z1 - z0) / (y1 - y0);
+    cam.updateProjectionMatrix();
+    const mat = new THREE.MeshBasicMaterial({ map: rt.texture });
+    meshes.forEach((m, k) => {
+      const g = m.geometry.clone();
+      const uv = new Float32Array(g.attributes.position.count * 2);
+      world[k].forEach((q, i) => {
+        uv[2 * i] = (q.z - z0) / (z1 - z0);
+        uv[2 * i + 1] = (q.y - y0) / (y1 - y0);
+      });
+      g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+      m.geometry = g;
+      m.material = mat;
+    });
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const osd = new THREE.Mesh(new THREE.PlaneGeometry(z1 - z0, y1 - y0),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, depthWrite: false }));
+    osd.rotation.y = -Math.PI / 2;
+    osd.position.set(xf - 0.004, (y0 + y1) / 2, (z0 + z1) / 2);
+    this.scene.add(osd);
+    return { rt, cam, meshes, osd, under, sc: { cv, ctx: cv.getContext("2d"), tex }, last: 0 };
+  }
+
+  _renderFeeds() {
+    const now = performance.now();
+    const due = [[this.coreFeed, this.feedEvery[0]], [this.hallFeed, this.feedEvery[1]]].filter(([f, every]) => f && now - f.last >= every);
+    if (!due.length) return;
+    const sc = this.scene, fog = sc.fog, bgc = sc.background;
+    const hide = [this.coreFeed, this.hallFeed].flatMap((f) => (f ? [...f.meshes, f.osd] : []));
+    hide.forEach((m) => { m.visible = false; });
+    for (const [f] of due) {
+      f.last = now;
+      if (f.under) {
+        sc.fog = this.underFog;
+        sc.background = this.underBg;
+        this.poolLamp.intensity = 5;
+        if (this.water) this.water.visible = false;
+      }
+      this.renderer.setRenderTarget(f.rt);
+      this.renderer.render(sc, f.cam);
+      this.renderer.setRenderTarget(null);
+      sc.fog = fog;
+      sc.background = bgc;
+      this.poolLamp.intensity = 0;
+      if (this.water) this.water.visible = true;
+    }
+    hide.forEach((m) => { m.visible = true; });
   }
 
   _named(o) {
@@ -213,10 +349,17 @@ export class HallWorld {
     const c = this.canvas;
     document.addEventListener("keydown", (e) => {
       if (e.target.closest?.("input, select, textarea, dialog")) return;
+      // In the Mac app a key the page leaves unhandled travels up the Cocoa responder chain:
+      // macOS beeps for every walk key, and Esc (cancelOperation:) takes the window out of full
+      // screen. Claiming the key here stops both. Cmd/Ctrl shortcuts still reach the app.
+      if (!e.metaKey && !e.ctrlKey && !(e.target.closest?.("button") && (e.key === "Enter" || e.key === " "))) {
+        e.preventDefault();
+      }
       this.keys.add(e.code);
       if (e.code === "KeyE" && this.active && !e.repeat) this._press();
     });
     document.addEventListener("keyup", (e) => {
+      if (!e.metaKey && !e.ctrlKey && !e.target.closest?.("input, select, textarea, dialog, button")) e.preventDefault();
       this.keys.delete(e.code);
       if (e.code === "KeyE") this._release();
     });
@@ -234,7 +377,10 @@ export class HallWorld {
     });
 
     let down = null;
+    c.addEventListener("contextmenu", (e) => e.preventDefault());
+    c.addEventListener("dragstart", (e) => e.preventDefault());
     c.addEventListener("mousedown", (e) => {
+      e.preventDefault();       // no text selection or drag image while looking around
       if (!this.active || e.button !== 0) return;
       if (this.locked) { this._press(); return; }
       down = { x: e.clientX, y: e.clientY, moved: false };
@@ -393,6 +539,7 @@ export class HallWorld {
     this.camera.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
     if (this.active && (this.locked || this.keys.size)) this._pickFrom(new THREE.Vector2(0, 0));
+    if (this.active) this._renderFeeds();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -481,7 +628,16 @@ export class HallWorld {
     if (this.screens.ro_NS) drawSegment(this.screens.ro_NS, s.source_inserted ? "NS IN" : "NS OUT", "#30d158");
     if (this.screens.ro_FC) drawSegment(this.screens.ro_FC, "FC --", "#5b6573");
     this.wall.forEach((sc, i) => sc && WALL[i] && WALL[i](sc, s, trend));
-    for (const sc of Object.values(this.screens).concat(this.wall)) if (sc) sc.tex.needsUpdate = true;
+    const feeds = [];
+    if (this.coreFeed) {
+      feedOsd(this.coreFeed.sc, "CAM 1  CORE", `POWER ${fmtW(s.channels.ch3_power_w)}   POOL ${s.process.pool_temp_c.toFixed(1)} °C`);
+      feeds.push(this.coreFeed.sc);
+    }
+    if (this.hallFeed) {
+      feedOsd(this.hallFeed.sc, "CAM 3  REACTOR HALL");
+      feeds.push(this.hallFeed.sc);
+    }
+    for (const sc of Object.values(this.screens).concat(this.wall, feeds)) if (sc) sc.tex.needsUpdate = true;
   }
 }
 
@@ -504,33 +660,50 @@ function fmtP(p) {
   return p === null || !isFinite(p) || Math.abs(p) > 9999 ? "∞" : `${p > 0 ? "+" : ""}${p.toFixed(1)} s`;
 }
 
-function bg(sc, title, accent = "#4fc3f7") {
+function bg(sc, title, accent = "#0a246a") {
+  // The workstation look: grey window chrome, a navy title bar and a light panel, like the
+  // operator displays of the late 1990s (see the HMI theme in app.css).
   const { ctx: g, cv } = sc;
-  g.fillStyle = "#06090d";
-  g.fillRect(0, 0, cv.width, cv.height);
   const h = cv.height / 9;
-  g.fillStyle = "#0f1a24";
-  g.fillRect(0, 0, cv.width, h);
-  g.fillStyle = accent;
-  g.font = `600 ${h * 0.5}px ${SANS}`;
+  g.fillStyle = "#e8e6df";
+  g.fillRect(0, 0, cv.width, cv.height);
+  const grad = g.createLinearGradient(0, 0, cv.width, 0);
+  grad.addColorStop(0, accent === "#ff6b6b" ? "#a00000" : "#0a246a");
+  grad.addColorStop(1, accent === "#ff6b6b" ? "#f08080" : "#a6caf0");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, cv.width, h * 0.8);
+  g.fillStyle = "#ffffff";
+  g.font = `bold ${h * 0.42}px ${SANS}`;
   g.textBaseline = "middle";
-  g.fillText(title, h * 0.4, h / 2);
+  g.fillText(title, h * 0.3, h * 0.4);
+  // window buttons
+  for (let k = 0; k < 3; k++) {
+    const x = cv.width - h * (0.75 + k * 0.7), y = h * 0.12;
+    g.fillStyle = "#d4d0c8"; g.fillRect(x, y, h * 0.6, h * 0.56);
+    g.strokeStyle = "#404040"; g.lineWidth = 2; g.strokeRect(x, y, h * 0.6, h * 0.56);
+  }
+  // status bar
+  g.fillStyle = "#d4d0c8";
+  g.fillRect(0, cv.height - h * 0.6, cv.width, h * 0.6);
+  g.strokeStyle = "#808080"; g.lineWidth = 2;
+  g.strokeRect(4, cv.height - h * 0.55, cv.width * 0.7, h * 0.5);
+  g.lineWidth = 1;
   return h;
 }
 
 function drawReactorScreen(sc, s) {
   const { ctx: g, cv } = sc;
-  const h = bg(sc, "PUR-1 REACTOR CONTROL", s.scrammed ? "#ff6b6b" : "#4fc3f7");
+  const h = bg(sc, "PUR-1 REACTOR CONTROL", s.scrammed ? "#ff6b6b" : "#0030c0");
   const W = cv.width;
   g.textBaseline = "alphabetic";
-  g.fillStyle = "#8aa0b4";
+  g.fillStyle = "#303030";
   g.font = `${h * 0.4}px ${SANS}`;
   g.fillText("POWER (CH2 LOG)", 40, h * 1.9);
-  g.fillStyle = "#e8f6ff";
+  g.fillStyle = "#000000";
   g.font = `${h * 1.25}px ${MONO}`;
   g.fillText(`${fmt(s.channels.ch2_percent)} %`, 40, h * 3.3);
   g.font = `${h * 0.5}px ${MONO}`;
-  g.fillStyle = "#8aa0b4";
+  g.fillStyle = "#303030";
   g.fillText(`Period ${fmtP(s.channels.ch2_period_s)}`, 40, h * 4.1);
   g.fillText(`Linear ${fmtW(s.channels.ch3_power_w)}   Safety ${s.channels.ch4_percent.toFixed(1)} %`, 40, h * 4.8);
   // rods
@@ -538,12 +711,12 @@ function drawReactorScreen(sc, s) {
   names.forEach((n, i) => {
     const r = s.rods[n];
     const x = W * 0.58 + i * W * 0.13, top = h * 1.5, bh = h * 4.6, bw = W * 0.06;
-    g.strokeStyle = "#2a3a4c";
+    g.strokeStyle = "#808080";
     g.strokeRect(x, top, bw, bh);
-    g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#94a3b8";
+    g.fillStyle = n === s.regulating_rod ? "#7a3fb0" : "#606870";
     const f = r.position_cm / r.travel_cm;
     g.fillRect(x + 4, top + bh * (1 - f), bw - 8, bh * f);
-    g.fillStyle = "#cfe3f3";
+    g.fillStyle = "#000000";
     g.font = `${h * 0.42}px ${MONO}`;
     g.fillText(n, x, top + bh + h * 0.6);
     g.fillText(r.position_cm.toFixed(1), x, top + bh + h * 1.15);
@@ -552,14 +725,14 @@ function drawReactorScreen(sc, s) {
   const y = h * 8.2;
   g.font = `600 ${h * 0.55}px ${SANS}`;
   if (s.scrammed) {
-    g.fillStyle = "#ff3b30";
+    g.fillStyle = "#e00000";
     g.fillRect(0, h * 7.4, W, h * 1.6);
     g.fillStyle = "#fff";
     g.fillText("SCRAM  " + s.scram_causes.join("; ").slice(0, 60), 40, y);
   } else {
-    g.fillStyle = s.servo.enabled ? "#30d158" : "#8aa0b4";
+    g.fillStyle = s.servo.enabled ? "#008000" : "#303030";
     g.fillText(s.servo.enabled ? `SERVO ON  ${fmtW(s.servo.setpoint_w)}` : "SERVO OFF", 40, y);
-    g.fillStyle = "#4fc3f7";
+    g.fillStyle = "#0030c0";
     g.fillText("Click to use", W - 260, y);
   }
 }
@@ -569,15 +742,15 @@ function drawMimicScreen(sc, s) {
   // the power and period, and the protection-system status. Read only; the controls are on the
   // left workstation and the hard-wired panel.
   const { ctx: g, cv } = sc;
-  const h = bg(sc, "RTP 3000 · OPERATOR DISPLAY", s.scrammed ? "#ff6b6b" : "#a5b4fc");
+  const h = bg(sc, "RTP 3000 · OPERATOR DISPLAY", s.scrammed ? "#ff6b6b" : "#0a246a");
   const W = cv.width;
   const cell = h * 1.35, gx = 60, gy = h * 1.6;
   const rods = { SS1: [3, 3], SS2: [0, 0], RR: [0, 3] };
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
-      g.fillStyle = "#15202b";
+      g.fillStyle = "#ffffff";
       g.fillRect(gx + c * cell, gy + r * cell, cell - 6, cell - 6);
-      g.fillStyle = s.true.power_w > 1 ? "#2563eb" : "#1e293b";
+      g.fillStyle = s.true.power_w > 1 ? "#4a78c8" : "#b8c4d8";
       g.fillRect(gx + c * cell + 8, gy + r * cell + 8, cell - 22, cell - 22);
     }
   }
@@ -586,18 +759,18 @@ function drawMimicScreen(sc, s) {
   for (const [n, [r, c]] of Object.entries(rods)) {
     const rod = s.rods[n];
     const f = rod ? rod.position_cm / rod.travel_cm : 0;
-    g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#f1f5f9";
+    g.fillStyle = n === s.regulating_rod ? "#7a3fb0" : "#303030";
     g.fillRect(gx + c * cell + 8, gy + r * cell + 8 + (cell - 22) * f, cell - 22, (cell - 22) * (1 - f));
-    g.fillStyle = "#0b1220";
+    g.fillStyle = "#ffffff";
     g.fillText(n, gx + c * cell + 14, gy + r * cell + cell / 2 - 3);
   }
   g.textBaseline = "alphabetic";
-  g.fillStyle = "#8aa0b4";
+  g.fillStyle = "#303030";
   g.font = `${h * 0.36}px ${SANS}`;
   g.fillText("CORE PLAN · rods shown as inserted fraction", gx, gy + 4 * cell + h * 0.5);
   const x = W * 0.52;
-  const row = (label, value, y, color = "#e8f6ff") => {
-    g.fillStyle = "#8aa0b4";
+  const row = (label, value, y, color = "#000000") => {
+    g.fillStyle = "#303030";
     g.font = `${h * 0.38}px ${SANS}`;
     g.fillText(label, x, y);
     g.fillStyle = color;
@@ -608,25 +781,25 @@ function drawMimicScreen(sc, s) {
   row("PERIOD", fmtP(s.channels.ch2_period_s), h * 3.2);
   row("POOL", `${s.process.pool_temp_c.toFixed(1)} °C  ${s.process.pool_level_m.toFixed(2)} m`, h * 4.6);
   const rps = s.protection && s.protection.enabled === false ? "RPS OUT OF SERVICE" : "RPS IN SERVICE";
-  row("PROTECTION", s.scrammed ? "SCRAM" : rps, h * 6.0, s.scrammed ? "#ff3b30" : "#30d158");
-  g.fillStyle = "#8aa0b4";
+  row("PROTECTION", s.scrammed ? "SCRAM" : rps, h * 6.0, s.scrammed ? "#e00000" : "#008000");
+  g.fillStyle = "#303030";
   g.font = `${h * 0.36}px ${SANS}`;
   g.fillText("Read only: use the left workstation to operate", x, h * 8.3);
 }
 
 function drawPlantScreen(sc, s, trend) {
   const { ctx: g, cv } = sc;
-  const h = bg(sc, "PLANT DATA", "#fbbf24");
+  const h = bg(sc, "PLANT DATA", "#b06000");
   const W = cv.width;
   // mini power trend, last 10 minutes, log 1 mW to 100 kW
   const x0 = 40, y0 = h * 1.4, pw = W * 0.6, ph = h * 4.4;
-  g.strokeStyle = "#1c2733";
+  g.strokeStyle = "#c8c8c8";
   for (let e = -3; e <= 5; e++) {
     const yy = y0 + ph * (1 - (e + 3) / 8);
     g.beginPath(); g.moveTo(x0, yy); g.lineTo(x0 + pw, yy); g.stroke();
   }
   const t1 = s.time_s, t0 = t1 - 600;
-  g.strokeStyle = "#4fc3f7";
+  g.strokeStyle = "#0030c0";
   g.lineWidth = 3;
   g.beginPath();
   let first = true;
@@ -639,7 +812,7 @@ function drawPlantScreen(sc, s, trend) {
   }
   g.stroke();
   g.lineWidth = 1;
-  g.fillStyle = "#8aa0b4";
+  g.fillStyle = "#303030";
   g.font = `${h * 0.38}px ${SANS}`;
   g.textBaseline = "alphabetic";
   g.fillText("Power, last 10 min", x0, y0 + ph + h * 0.6);
@@ -652,10 +825,10 @@ function drawPlantScreen(sc, s, trend) {
     ["Chiller", s.process.chiller_available ? "on" : "TRIP"],
   ];
   rows.forEach(([k, v], i) => {
-    g.fillStyle = "#8aa0b4";
+    g.fillStyle = "#303030";
     g.font = `${h * 0.38}px ${SANS}`;
     g.fillText(k, rx, y0 + h * (0.4 + i * 1.1));
-    g.fillStyle = "#e8f6ff";
+    g.fillStyle = "#000000";
     g.font = `${h * 0.55}px ${MONO}`;
     g.fillText(v, rx, y0 + h * (0.95 + i * 1.1));
   });
@@ -663,10 +836,10 @@ function drawPlantScreen(sc, s, trend) {
   g.font = `${h * 0.42}px ${SANS}`;
   const alarms = s.alarms.length ? s.alarms : ["No active alarms"];
   alarms.slice(0, 2).forEach((a, i) => {
-    g.fillStyle = s.alarms.length ? "#ffb020" : "#30d158";
+    g.fillStyle = s.alarms.length ? "#b06000" : "#008000";
     g.fillText(a.slice(0, 64), 40, h * (7.4 + i * 0.7));
   });
-  g.fillStyle = "#fbbf24";
+  g.fillStyle = "#b06000";
   g.fillText("Click to use", W - 230, h * 8.6);
 }
 
@@ -682,65 +855,248 @@ function drawSegment(sc, text, color) {
   g.textAlign = "left";
 }
 
-function tile(sc, title, value, sub, color = "#e8f6ff", alert = null) {
+
+// ------------------------------------------------------------------ the video wall
+//
+// Laid out like the real PUR-1 wall: trend plots down the left (black, green traces, red title
+// bars) over a white plant schematic, the live underwater core camera across the middle two
+// columns, and status, a hall camera and the radiation monitors down the right.
+
+function wallHeader(g, W, H, title, color = "#b00000") {
+  const hh = H * 0.13;
+  g.fillStyle = color;
+  g.fillRect(0, 0, W, hh);
+  g.fillStyle = "#ffffff";
+  g.font = `bold ${hh * 0.62}px ${SANS}`;
+  g.textBaseline = "middle";
+  g.fillText(title, 12, hh * 0.52);
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  g.textAlign = "right";
+  g.font = `${hh * 0.55}px ${MONO}`;
+  g.fillText(t, W - 12, hh * 0.52);
+  g.textAlign = "left";
+  g.textBaseline = "alphabetic";
+  return hh;
+}
+
+function trendTile(sc, s, trend, title, series, { log = false, lo, hi, unit = "" } = {}) {
+  // series: [{ pick(p) -> value, color, label }]; 10 minutes of history.
   const { ctx: g, cv } = sc;
   const W = cv.width, H = cv.height;
-  g.fillStyle = alert === "alarm" ? "#3a0a0c" : alert === "warn" ? "#2e2306" : "#070b10";
+  g.fillStyle = "#000000";
   g.fillRect(0, 0, W, H);
-  g.strokeStyle = "#1e2a36";
-  g.lineWidth = 4;
-  g.strokeRect(2, 2, W - 4, H - 4);
-  g.textBaseline = "alphabetic";
-  g.fillStyle = "#7f93a8";
-  g.font = `600 ${H * 0.12}px ${SANS}`;
-  g.fillText(title, 22, H * 0.2);
-  g.fillStyle = color;
-  g.font = `${H * 0.3}px ${MONO}`;
-  g.fillText(value, 22, H * 0.6);
-  g.fillStyle = "#8aa0b4";
-  g.font = `${H * 0.11}px ${MONO}`;
-  g.fillText(sub, 22, H * 0.85);
+  const hh = wallHeader(g, W, H, title);
+  const x0 = 64, x1 = W - 14, y0 = hh + 14, y1 = H - 34;
+  const t1 = s.time_s, t0 = t1 - 600;
+  const pts = trend.filter((p) => p[0] >= t0);
+  const val = (v) => (log ? Math.log10(Math.max(v, 1e-12)) : v);
+  if (lo === undefined || hi === undefined) {
+    const vs = pts.flatMap((p) => series.map((c) => val(c.pick(p)))).filter(isFinite);
+    lo = vs.length ? Math.min(...vs) : 0;
+    hi = vs.length ? Math.max(...vs) : 1;
+    const pad = Math.max((hi - lo) * 0.15, log ? 0.5 : 0.5);
+    lo -= pad; hi += pad;
+  }
+  // grid
+  g.strokeStyle = "#1f3a1f";
+  g.lineWidth = 1;
+  g.fillStyle = "#8fbf8f";
+  g.font = `${H * 0.065}px ${MONO}`;
+  for (let k = 0; k <= 4; k++) {
+    const yy = y1 - ((y1 - y0) * k) / 4;
+    g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke();
+    const v = lo + ((hi - lo) * k) / 4;
+    g.fillText(log ? `1e${v.toFixed(0)}` : v.toFixed(1), 6, yy + 6);
+  }
+  for (let k = 0; k <= 10; k += 2) {
+    const xx = x0 + ((x1 - x0) * k) / 10;
+    g.beginPath(); g.moveTo(xx, y0); g.lineTo(xx, y1); g.stroke();
+  }
+  g.fillText("-10 min", x0, H - 10);
+  g.textAlign = "right";
+  g.fillText("now", x1, H - 10);
+  g.textAlign = "left";
+  // traces
+  series.forEach((c, j) => {
+    g.strokeStyle = c.color;
+    g.lineWidth = 3;
+    g.beginPath();
+    let first = true;
+    for (const p of pts) {
+      const v = val(c.pick(p));
+      if (!isFinite(v)) continue;
+      const xx = x0 + ((p[0] - t0) / 600) * (x1 - x0);
+      const yy = y1 - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (y1 - y0);
+      first ? g.moveTo(xx, yy) : g.lineTo(xx, yy);
+      first = false;
+    }
+    g.stroke();
+    const last = pts.length ? c.pick(pts[pts.length - 1]) : NaN;
+    g.fillStyle = c.color;
+    g.font = `bold ${H * 0.075}px ${MONO}`;
+    g.fillText(`${c.label} ${c.fmt ? c.fmt(last) : fmt(last)}${unit}`, x0 + 8 + j * (W * 0.42), y0 + H * 0.09);
+  });
+  g.lineWidth = 1;
 }
 
-function rodTile(sc, s, n) {
-  const r = s.rods[n];
-  if (!r) return tile(sc, n, "--", "");
-  const state = r.falling ? "DROPPING" : !r.latched ? "UNLATCHED" : r.moving ? "MOVING" : "LATCHED";
-  tile(sc, `ROD ${n}`, `${r.position_cm.toFixed(1)} cm`, `${state}  −$${r.worth_dollars.toFixed(2)}`,
-    n === s.regulating_rod ? "#d8b4fe" : "#e2e8f0", !r.latched ? "warn" : null);
+function schematicTile(sc, s) {
+  // White plant schematic of the purification and cooling loop, like the one on the real wall.
   const { ctx: g, cv } = sc;
-  const f = r.position_cm / r.travel_cm;
-  g.fillStyle = "#1e2a36";
-  g.fillRect(cv.width - 60, 30, 26, cv.height - 60);
-  g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#94a3b8";
-  g.fillRect(cv.width - 60, 30 + (cv.height - 60) * (1 - f), 26, (cv.height - 60) * f);
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, W, H);
+  const hh = wallHeader(g, W, H, "PRIMARY WATER SYSTEM", "#0a246a");
+  const run = s.process.chiller_available;
+  const flow = run ? "#00a000" : "#909090";
+  const yPipe = hh + (H - hh) * 0.42, yRet = H - 40;
+  // pool
+  const px = 70, pr = 46;
+  g.strokeStyle = "#000"; g.lineWidth = 3;
+  g.fillStyle = "#cfe6ff";
+  g.fillRect(px - pr, yPipe - 20, pr * 2, yRet - yPipe + 30);
+  g.strokeRect(px - pr, yPipe - 20, pr * 2, yRet - yPipe + 30);
+  const lvl = Math.max(0, Math.min(1, s.process.pool_level_m / 5.2));
+  g.fillStyle = "#4a90d9";
+  const top = yRet + 10 - (yRet - yPipe + 30) * lvl;
+  g.fillRect(px - pr + 3, top, pr * 2 - 6, yRet + 10 - top - 2);
+  g.fillStyle = "#000";
+  g.font = `bold ${H * 0.07}px ${SANS}`;
+  g.textAlign = "center";
+  g.fillText("POOL", px, yPipe - 28);
+  // components along the loop
+  const comps = [["PUMP", 0.30, true], ["FILTER", 0.47], ["IX", 0.63], ["CHILLER", 0.82]];
+  g.strokeStyle = flow; g.lineWidth = 6;
+  g.beginPath(); g.moveTo(px + pr, yPipe); g.lineTo(W * 0.92, yPipe); g.lineTo(W * 0.92, yRet); g.lineTo(px + pr, yRet); g.stroke();
+  // flow arrows
+  g.fillStyle = flow;
+  for (const fx of [0.38, 0.55, 0.72]) {
+    const ax = W * fx;
+    g.beginPath(); g.moveTo(ax + 9, yPipe); g.lineTo(ax - 7, yPipe - 9); g.lineTo(ax - 7, yPipe + 9); g.fill();
+  }
+  for (const fx of [0.6, 0.3]) {
+    const ax = W * fx;
+    g.beginPath(); g.moveTo(ax - 9, yRet); g.lineTo(ax + 7, yRet - 9); g.lineTo(ax + 7, yRet + 9); g.fill();
+  }
+  g.lineWidth = 2.5;
+  for (const [name, fx, round] of comps) {
+    const cx = W * fx, w = 64, h = 46;
+    g.fillStyle = name === "CHILLER" && !run ? "#ffd0d0" : "#e8e6df";
+    g.strokeStyle = "#000";
+    if (round) {
+      g.beginPath(); g.arc(cx, yPipe, 24, 0, Math.PI * 2); g.fill(); g.stroke();
+    } else {
+      g.fillRect(cx - w / 2, yPipe - h / 2, w, h); g.strokeRect(cx - w / 2, yPipe - h / 2, w, h);
+    }
+    g.fillStyle = "#000";
+    g.font = `${H * 0.058}px ${SANS}`;
+    g.fillText(name, cx, yPipe + 46);
+  }
+  // values
+  g.textAlign = "left";
+  g.font = `${H * 0.065}px ${MONO}`;
+  g.fillStyle = "#000";
+  g.fillText(`T ${s.process.pool_temp_c.toFixed(2)} °C`, W * 0.25, yRet - 16);
+  g.fillText(`LVL ${s.process.pool_level_m.toFixed(2)} m`, W * 0.56, yRet - 16);
+  g.fillStyle = run ? "#008000" : "#c00000";
+  g.fillText(run ? "CHILLER RUN" : "CHILLER TRIP", W * 0.66, hh + 26);
+  g.lineWidth = 1;
 }
 
-const WALL = [
-  (sc, s) => tile(sc, "CH1 STARTUP", s.channels.ch1_saturated ? "SAT" : `${fmt(s.channels.ch1_cps)} cps`,
-    `period ${fmtP(s.channels.ch1_saturated ? null : s.channels.ch1_period_s)}`),
-  (sc, s) => tile(sc, "CH2 LOG POWER", `${fmt(s.channels.ch2_percent)} %`, `period ${fmtP(s.channels.ch2_period_s)}`,
-    "#7dd3fc", s.channels.ch2_period_s > 0 && s.channels.ch2_period_s < 15 ? "warn" : null),
-  (sc, s) => tile(sc, "CH3 LINEAR", fmtW(s.channels.ch3_power_w),
-    `${s.channels.ch3_percent_of_range.toFixed(1)}% of ${fmtW(s.channels.ch3_range_w)}`),
-  (sc, s) => tile(sc, "CH4 SAFETY", `${s.channels.ch4_percent.toFixed(1)} %`, "trip 120 %", "#e2e8f0",
-    s.channels.ch4_percent >= 110 ? "alarm" : null),
-  (sc, s) => rodTile(sc, s, "SS1"),
-  (sc, s) => rodTile(sc, s, "SS2"),
-  (sc, s) => rodTile(sc, s, "RR"),
-  (sc, s) => tile(sc, "SERVO", s.servo.enabled ? "AUTO" : "MANUAL", `setpoint ${fmtW(s.servo.setpoint_w)}`,
-    s.servo.enabled ? "#30d158" : "#e2e8f0"),
-  (sc, s) => tile(sc, "POOL TEMPERATURE", `${s.process.pool_temp_c.toFixed(2)} °C`,
-    s.process.chiller_available ? "chiller running" : "CHILLER TRIPPED", "#e2e8f0",
-    s.process.pool_temp_c > 29.7 ? "warn" : null),
-  (sc, s) => tile(sc, "WATER ABOVE CORE", `${s.process.pool_level_m.toFixed(2)} m`, "alarm below 3.96 m", "#e2e8f0",
-    s.process.pool_level_m < 3.96 ? "alarm" : null),
-  (sc, s) => tile(sc, "RADIATION", `${fmt(s.radiation_mr_h.pool_top)} mR/h`,
-    `console ${fmt(s.radiation_mr_h.console)}  water ${fmt(s.radiation_mr_h.water)}`, "#e2e8f0",
-    s.radiation_mr_h.pool_top >= 50 ? "alarm" : null),
-  (sc, s) => s.scrammed
-    ? tile(sc, "REACTOR", "SCRAM", s.scram_causes.join("; ").slice(0, 34), "#ff6b6b", "alarm")
-    : tile(sc, "REACTOR", s.setback ? "SETBACK" : s.true.power_w > 1 ? "AT POWER" : "SHUTDOWN",
-      s.alarms[0] ? s.alarms[0].slice(0, 34) : "no alarms", s.setback ? "#ffb020" : "#30d158",
-      s.setback ? "warn" : null),
-];
+function statusTile(sc, s) {
+  const { ctx: g, cv } = sc;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#000000";
+  g.fillRect(0, 0, W, H);
+  const hh = wallHeader(g, W, H, "PUR-1 REACTOR STATUS");
+  const mode = s.scrammed ? "SCRAM" : s.setback ? "SETBACK" : s.true.power_w > 1 ? "AT POWER" : "SHUTDOWN";
+  g.fillStyle = s.scrammed ? "#ff3030" : s.setback ? "#ffb020" : "#30e030";
+  g.font = `bold ${H * 0.17}px ${MONO}`;
+  g.fillText(mode, 14, hh + H * 0.2);
+  g.font = `${H * 0.075}px ${MONO}`;
+  g.fillStyle = "#30e030";
+  const rows = [
+    ["POWER", fmtW(s.channels.ch3_power_w)],
+    ["LOG PWR", `${fmt(s.channels.ch2_percent)} %`],
+    ["PERIOD", fmtP(s.channels.ch2_period_s)],
+    ["SERVO", s.servo.enabled ? `AUTO ${fmtW(s.servo.setpoint_w)}` : "MANUAL"],
+  ];
+  rows.forEach(([k, v], i) => {
+    const y = hh + H * (0.34 + i * 0.1);
+    g.fillStyle = "#8fbf8f"; g.fillText(k, 14, y);
+    g.fillStyle = "#e0ffe0"; g.fillText(v, 150, y);
+  });
+  // rod bars
+  Object.entries(s.rods).forEach(([n, r], i) => {
+    const x = W * 0.62 + i * W * 0.12, top = hh + 20, bh = H * 0.62, bw = W * 0.07;
+    g.strokeStyle = "#3a5a3a"; g.strokeRect(x, top, bw, bh);
+    const f = r.position_cm / r.travel_cm;
+    g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#30e030";
+    g.fillRect(x + 3, top + bh * (1 - f), bw - 6, bh * f);
+    g.fillStyle = "#e0ffe0";
+    g.font = `${H * 0.06}px ${MONO}`;
+    g.fillText(n, x, top + bh + H * 0.08);
+    g.fillText(r.position_cm.toFixed(1), x, top + bh + H * 0.15);
+  });
+}
+
+function radiationTile(sc, s) {
+  const { ctx: g, cv } = sc;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#000000";
+  g.fillRect(0, 0, W, H);
+  const hh = wallHeader(g, W, H, "RADIATION MONITORS");
+  const r = s.radiation_mr_h;
+  const rows = [["RAM POOL TOP", r.pool_top, 50], ["RAM CONSOLE", r.console, 5], ["RAM WATER", r.water, 50], ["CAM AIR", r.air, 5]];
+  g.font = `${H * 0.08}px ${MONO}`;
+  rows.forEach(([k, v, lim], i) => {
+    const y = hh + H * (0.13 + i * 0.12);
+    g.fillStyle = "#8fbf8f"; g.fillText(k, 14, y);
+    g.fillStyle = v >= lim ? "#ff3030" : "#e0ffe0";
+    g.fillText(`${fmt(v)} mR/h`, W * 0.52, y);
+  });
+  const alarms = s.scrammed ? s.scram_causes : s.alarms;
+  g.fillStyle = alarms.length ? "#ffb020" : "#30e030";
+  g.font = `${H * 0.07}px ${MONO}`;
+  (alarms.length ? alarms : ["NO ACTIVE ALARMS"]).slice(0, 2).forEach((a, i) => g.fillText(a.slice(0, 40), 14, hh + H * (0.66 + i * 0.1)));
+}
+
+function feedOsd(sc, label, sub) {
+  // On-screen display over a camera feed: camera name, a recording dot and the time.
+  const { ctx: g, cv } = sc;
+  const W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  const fs = Math.max(16, H * 0.045);
+  g.font = `bold ${fs}px ${MONO}`;
+  g.textBaseline = "top";
+  g.fillStyle = "rgba(0,0,0,0.45)";
+  g.fillRect(10, 10, g.measureText(label).width + fs * 2.2, fs * 1.5);
+  g.fillStyle = "#ffffff";
+  g.fillText(label, 14 + fs * 1.4, 14);
+  g.fillStyle = Math.floor(performance.now() / 700) % 2 ? "#ff2020" : "#600000";
+  g.beginPath(); g.arc(14 + fs * 0.6, 14 + fs * 0.55, fs * 0.38, 0, Math.PI * 2); g.fill();
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  g.textAlign = "right";
+  g.fillStyle = "#ffffff";
+  g.fillText(t, W - 14, 14);
+  if (sub) {
+    g.textBaseline = "bottom";
+    g.fillText(sub, W - 14, H - 12);
+  }
+  g.textAlign = "left";
+  g.textBaseline = "alphabetic";
+}
+
+// Index = row * 4 + column, rows top to bottom and columns left to right as the operator sees them.
+// Columns 1 and 2 carry the core camera and are not drawn here.
+const WALL = {
+  0: (sc, s, trend) => trendTile(sc, s, trend, "REACTOR POWER (LOG)", [
+    { pick: (p) => p[1], color: "#30ff30", label: "P", fmt: fmtW },
+  ], { log: true, lo: -3, hi: 5 }),
+  4: (sc, s, trend) => trendTile(sc, s, trend, "FUEL / POOL TEMPERATURE", [
+    { pick: (p) => p[4], color: "#30ff30", label: "FUEL", fmt: (v) => `${isFinite(v) ? v.toFixed(1) : "--"} °C` },
+    { pick: (p) => p[5], color: "#ffe030", label: "POOL", fmt: (v) => `${isFinite(v) ? v.toFixed(2) : "--"} °C` },
+  ]),
+  8: (sc, s) => schematicTile(sc, s),
+  3: (sc, s) => statusTile(sc, s),
+  11: (sc, s) => radiationTile(sc, s),
+};

@@ -26,26 +26,18 @@ from __future__ import annotations
 import math
 
 from . import dims as D
+from . import props
 from .common import MeshBuilder, box, cylinder, empty
 
 MONITOR_W, MONITOR_H = 0.54, 0.31      # 24 in 16:9 panel
 MONITOR_SPACING = 0.66
 
 
-def _monitor(parent, mats, name, x_back, y, z_base, w=MONITOR_W, h=MONITOR_H, role=None, stand=True):
-    """A flat-panel monitor on a stand. x_back = x of the back of the stand foot; screen faces -X.
-    Returns the screen object. z_base = surface the stand sits on."""
-    zc = z_base + (0.16 if stand else 0.0) + h / 2
-    mb = MeshBuilder()
-    if stand:
-        mb.box((x_back - 0.06, y, z_base + 0.008), (0.12, 0.24, 0.016))           # foot
-        mb.box((x_back - 0.03, y, z_base + 0.10), (0.03, 0.05, 0.20))             # neck
-    mb.box((x_back - 0.05, y, zc), (0.03, w + 0.03, h + 0.03))                     # bezel
-    mb.build(f"{name}_Bezel", mats["screen_bezel"], parent)
-    scr = box(f"ui_Display_{name.split('_')[-1]}" if name.startswith("Display") else name,
-              (x_back - 0.068, y, zc), (0.005, w, h), mats["screen"], parent)
-    scr["role"] = role or scr.name
-    return scr
+def _monitor(parent, mats, name, x_back, y, z_base, w=MONITOR_W, h=MONITOR_H, role=None, stand=True, slim_foot=False):
+    """A flat-panel monitor whose screen faces -X (see props.monitor). Console monitors are named
+    Display_<side> and their screens ui_Display_<side>; other monitors use `name` for the screen."""
+    screen = f"ui_Display_{name.split('_')[-1]}" if name.startswith("Display") else name
+    return props.monitor(parent, mats, name, screen, x_back, y, z_base, w, h, role, stand, slim_foot)
 
 
 def build_console(parent, mats, origin=(0, 0, 0)):
@@ -65,7 +57,7 @@ def build_console(parent, mats, origin=(0, 0, 0)):
     for y in (-width / 2 + 0.25, width / 2 - 0.25):
         desk.box((0.05, y, (h - 0.03) / 2), (depth - 0.15, 0.45, h - 0.03))                # pedestals
     desk.box((depth / 2 - 0.03, 0, (h - 0.03) / 2), (0.03, width - 0.9, h - 0.03))         # modesty panel
-    desk.build("Console_Desk", mats["desk_black"], root)
+    desk.build("Console_Desk", mats["desk_black"], root, bevel=0.004)
 
     # Low hard-wired panel along the back edge of the desk, with a sloped face towards the operator.
     px0, px1 = depth / 2 - 0.26, depth / 2
@@ -75,7 +67,7 @@ def build_console(parent, mats, origin=(0, 0, 0)):
          (px1 - 0.08, -width / 2, z1), (px1, -width / 2, z1), (px1, width / 2, z1), (px1 - 0.08, width / 2, z1)]
     f = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
     wedge._add(v, f)
-    wedge.build("Console_HardwiredPanel", mats["panel"], root)
+    wedge.build("Console_HardwiredPanel", mats["panel"], root, bevel=0.003)
 
     def face_x(z):
         return px0 + (z - z0) / (z1 - z0) * (px1 - 0.08 - px0)
@@ -114,50 +106,25 @@ def build_console(parent, mats, origin=(0, 0, 0)):
     for i, nm in enumerate(("Left", "Center", "Right")):
         y = (1 - i) * MONITOR_SPACING
         out["displays"][nm] = _monitor(root, mats, f"Display_{nm}", px1 + 0.02, y, z1,
-                                       role=f"workstation_display_{nm.lower()}")
+                                       role=f"workstation_display_{nm.lower()}", slim_foot=True)
     # Keyboards, mice and the trackball on the worktop.
-    box("Keyboard", (-0.08, MONITOR_SPACING, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
-    box("Keyboard_2", (-0.08, -MONITOR_SPACING, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
-    box("Keyboard_3", (-0.08, 0.0, h + 0.01), (0.15, 0.44, 0.02), mats["panel"], root)
-    cylinder("Trackball", (-0.08, 0.33, h + 0.0), 0.028, 0.03, mats["panel"], root, 16)
-    box("Mouse", (-0.08, -0.33, h + 0.015), (0.10, 0.06, 0.03), mats["panel"], root)
+    props.keyboard(root, mats, "Keyboard", (-0.08, MONITOR_SPACING, h))
+    props.keyboard(root, mats, "Keyboard_2", (-0.08, -MONITOR_SPACING, h))
+    props.keyboard(root, mats, "Keyboard_3", (-0.08, 0.0, h))
+    props.trackball(root, mats, "Trackball", (-0.08, 0.34, h))
+    props.mouse(root, mats, "Mouse", (-0.08, -0.34, h), pad_size=(0.20, 0.17))
     # Telephone (left end) and the console radiation monitor (right end) on the desk.
-    box("Telephone", (0.12, width / 2 - 0.14, h + 0.03), (0.20, 0.18, 0.06), mats["panel"], root)
+    tel = MeshBuilder().box((0.12, width / 2 - 0.14, h + 0.025), (0.20, 0.18, 0.05))
+    tel.box((0.16, width / 2 - 0.14, h + 0.06), (0.06, 0.20, 0.03))                 # handset
+    tel.build("Telephone", mats["panel"], root, bevel=0.006)
     ram = MeshBuilder().box((0.12, -width / 2 + 0.12, h + 0.09), (0.12, 0.10, 0.18))
     ram.cylinder((0.12, -width / 2 + 0.12, h + 0.18), 0.01, 0.15, 8)
     out["ram_console"] = ram.build("RAM_Console", mats["steel"], root)
 
     # Two blue operator chairs.
     for i, y in enumerate((-MONITOR_SPACING, MONITOR_SPACING)):
-        _chair(root, mats, (-0.75, y, 0), f"Chair_{i + 1}")
+        props.office_chair(root, mats, (-0.75, y, 0), f"Chair_{i + 1}", facing=0.08 * (1 if y > 0 else -1))
     return out
-
-
-def _chair(parent, mats, origin, name, facing=0.0):
-    """Blue task chair with a black five-star base; the backrest is behind (-X rotated by `facing`)."""
-    x, y, z = origin
-    c, s = math.cos(facing), math.sin(facing)
-
-    def rot(dx, dy):
-        return x + dx * c - dy * s, y + dx * s + dy * c
-
-    mb = MeshBuilder()
-    mb.cylinder((x, y, z), 0.03, 0.42, 12)                      # gas lift
-    for k in range(5):                                           # star base
-        a = 2 * math.pi * k / 5
-        mb.box((x + 0.17 * math.cos(a), y + 0.17 * math.sin(a), z + 0.03), (0.30, 0.04, 0.03))
-    for dx, dy in ((0.0, -0.21), (0.0, 0.21)):                   # armrest posts
-        ax, ay = rot(dx, dy)
-        mb.box((ax, ay, z + 0.58), (0.05, 0.03, 0.18))
-    mb.build(f"{name}_Base", mats["rack"], parent)
-    seat = MeshBuilder()
-    seat.box((x, y, z + 0.46), (0.46, 0.46, 0.08))
-    bx, by = rot(-0.21, 0.0)
-    seat.box((bx, by, z + 0.76), (0.06, 0.44, 0.50))             # backrest
-    for dy in (-0.21, 0.21):                                     # armrest pads
-        ax, ay = rot(0.0, dy)
-        seat.box((ax, ay, z + 0.68), (0.26, 0.05, 0.03))
-    seat.build(f"{name}_Seat", mats["chair_blue"], parent)
 
 
 def build_video_wall(parent, mats, wall_x, center_y, center_z):
@@ -225,25 +192,24 @@ def build_diag_bench(parent, mats, origin):
     ox, oy, oz = origin
     root = empty("DiagBench", (ox, oy, oz), parent)
     length, depth, h = 2.4, 0.76, 0.74
-    top = MeshBuilder().box((0, 0, h - 0.015), (length, depth, 0.03))
-    top.build("DiagBench_Top", mats["table_top"], root)
-    legs = MeshBuilder()
-    for dx in (-length / 2 + 0.06, length / 2 - 0.06):
-        for dy in (-depth / 2 + 0.06, depth / 2 - 0.06):
-            legs.box((dx, dy, (h - 0.03) / 2), (0.05, 0.05, h - 0.03))
-        legs.box((dx, 0, h - 0.08), (0.05, depth - 0.12, 0.05))
-    legs.build("DiagBench_Legs", mats["table_blue"], root)
+    table = props.work_table(root, mats, "DiagBench", (0, 0, 0), length, depth, h)
+    table.rotation_euler = (0, 0, math.pi)          # modesty panel towards the wall (-Y)
     # Three monitors on the bench, screens facing -Y (towards the analyst), built along X then rotated.
     mon = empty("DiagBench_Monitors", (0, 0, 0), root)
     mon.rotation_euler = (0, 0, -math.pi / 2)       # local (x, y) -> world (y, -x): screens (local -X) face world +Y
     for i, dx in enumerate((-0.75, 0.0, 0.75)):
         _monitor(mon, mats, f"DiagBench_Monitor_{i + 1}", 0.30, dx, h, w=0.52, h=0.30)
     for i, dx in enumerate((-0.75, 0.0, 0.75)):
-        box(f"DiagBench_Keyboard_{i + 1}", (dx, -0.12, h + 0.01), (0.42, 0.14, 0.02), mats["panel"], root)
-    box("DiagBench_Laptop", (1.0, 0.05, h + 0.012), (0.32, 0.22, 0.02), mats["panel"], root)
+        props.keyboard(root, mats, f"DiagBench_Keyboard_{i + 1}", (dx, 0.08, h), facing=-math.pi / 2)
+    props.mouse(root, mats, "DiagBench_Mouse", (0.36, 0.10, h), facing=-math.pi / 2, pad_size=(0.18, 0.20))
+    lap = MeshBuilder().box((0.0, 0.0, 0.01), (0.32, 0.22, 0.02))
+    lap.box((0.0, -0.11, 0.12), (0.32, 0.012, 0.21))                               # open lid
+    lap.build("DiagBench_Laptop", mats["pc_case"], empty("DiagBench_LaptopFrame", (1.0, 0.02, h), root), bevel=0.004)
+    for i, dx in enumerate((-1.0, 0.9)):
+        props.pc_tower(root, mats, f"DiagBench_PC_{i + 1}", (dx, -0.10, 0), facing=-math.pi / 2)
     # Small instrument rack at the west end of the bench and a wall monitor + whiteboard on the wall behind.
     rk = MeshBuilder().box((-length / 2 - 0.35, 0.0, 0.60), (0.50, 0.55, 1.20))
-    rk.build("DiagBench_Rack", mats["rack"], root)
+    rk.build("DiagBench_Rack", mats["rack"], root, bevel=0.006)
     rkm = MeshBuilder()
     for u in range(4):
         rkm.box((-length / 2 - 0.35, -0.28, 0.20 + u * 0.26), (0.46, 0.008, 0.20))
@@ -255,7 +221,7 @@ def build_diag_bench(parent, mats, origin):
     _monitor(wm, mats, "DiagBench_WallMonitor_1", -dy - 0.02, -0.3, 1.45, w=1.10, h=0.62, stand=False)
     box("Whiteboard", (1.1, dy + 0.02, 1.55), (1.2, 0.02, 0.9), mats["whiteboard"], root)
     box("Whiteboard_Tray", (1.1, dy + 0.04, 1.10), (1.2, 0.05, 0.02), mats["conduit"], root)
-    _chair(root, mats, (0.0, 0.75, 0), "DiagBench_Chair", facing=-math.pi / 2)
+    props.office_chair(root, mats, (0.0, 0.75, 0), "DiagBench_Chair", facing=-math.pi / 2, seat_mat="chair_green")
     return root
 
 

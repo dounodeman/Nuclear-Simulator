@@ -165,12 +165,18 @@ function buildStatic() {
   $$("[data-close]").forEach((b) => b.addEventListener("click", () => closeStation()));
   $("#enterBtn").addEventListener("click", () => enterHall());
   document.addEventListener("keydown", (e) => {
+    if (e.code === "KeyF" && !e.repeat && !e.metaKey && !e.ctrlKey && !e.target.closest?.("input, select, textarea")) {
+      toggleFullscreen();
+      return;
+    }
     if (e.code !== "Escape" || $("#updateDlg").open) return;
+    e.preventDefault();       // Esc is ours: menus and workstations, never the window's full screen
     if (station) closeStation();
     else if (!$("#instructor").hidden) toggleDrawer(false);
     else if ($("#menu").hidden) showMenu(true);
   });
 
+  $("#fullscreenBtn").addEventListener("click", toggleFullscreen);
   $("#updateBtn").addEventListener("click", openUpdates);
   $("#saveToken").addEventListener("click", saveToken);
   $("#installBtn").addEventListener("click", installUpdate);
@@ -275,7 +281,25 @@ function showMenu(on) {
   else if (!station) world?.setActive(true);
 }
 
+// Full screen goes through the native window in the Mac app (Esc cannot leave it); in a
+// browser it uses the Fullscreen API and, where supported, keeps Esc with a keyboard lock.
+async function toggleFullscreen() {
+  try {
+    if (info?.native_window) {
+      await api("/api/window/fullscreen", {});
+    } else if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+      await navigator.keyboard?.lock?.(["Escape"]).catch(() => {});
+    }
+  } catch (e) {
+    toast(`Full screen: ${e.message}`);
+  }
+}
+
 function enterHall() {
+  document.activeElement?.blur?.();   // keys go to the hall, not the menu button
   showMenu(false);
   if (!world) return;
   world.setActive(true);
@@ -332,6 +356,10 @@ function render() {
   const truth = document.body.classList.contains("truth");
 
   $("#clock").textContent = fmtTime(s.time_s);
+  $$("[data-status=clock]").forEach((el) => { el.textContent = fmtTime(s.time_s); });
+  $$("[data-status=msg]").forEach((el) => {
+    el.textContent = s.scrammed ? `SCRAM: ${s.scram_causes.join("; ")}` : s.alarms[0] || "Ready";
+  });
   $$("#speed button").forEach((b) => b.classList.toggle("on", +b.dataset.speed === s.speed));
 
   // Channels
@@ -514,7 +542,10 @@ function drawTrend() {
   g.clearRect(0, 0, W, H);
   if (!state) return;
 
-  const css = getComputedStyle(document.documentElement);
+  const css = getComputedStyle(cv);       // the workstation theme sets the --trend-* colours
+  const col = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+  g.fillStyle = col("--trend-bg", "transparent");
+  g.fillRect(0, 0, W, H);
   const L = 54, R = 46, T = 10, B = 22;
   const pw = W - L - R, ph = H - T - B;
   const tEnd = Math.max(state.time_s, trendWindow * 0.02);
@@ -526,8 +557,8 @@ function drawTrend() {
   const yT = (c) => T + (1 - (c - 0) / tmax) * ph;
 
   g.font = "10px " + css.getPropertyValue("--mono");
-  g.strokeStyle = "#1c2533";
-  g.fillStyle = "#4b5869";
+  g.strokeStyle = col("--trend-grid", "#1c2533");
+  g.fillStyle = col("--trend-text", "#4b5869");
   g.lineWidth = 1;
   for (let e = lo; e <= hi; e++) {
     const yy = Math.round(y(10 ** e)) + 0.5;
@@ -545,11 +576,11 @@ function drawTrend() {
   g.textAlign = "left";
   for (let i = 0; i <= 4; i++) {
     const c = (tmax * i) / 4;
-    g.fillStyle = "#a16207";
+    g.fillStyle = col("--trend-fuel", "#a16207");
     g.fillText(`${c.toFixed(0)}°C`, L + pw + 6, yT(c) + 3);
   }
   // 10 kW rated and 12 kW licensed lines
-  g.strokeStyle = "rgba(248,113,113,.5)";
+  g.strokeStyle = col("--trend-limit", "rgba(248,113,113,.5)");
   g.setLineDash([4, 4]);
   g.beginPath(); g.moveTo(L, y(12000)); g.lineTo(L + pw, y(12000)); g.stroke();
   g.setLineDash([]);
@@ -564,20 +595,21 @@ function drawTrend() {
   };
   g.save();
   g.beginPath(); g.rect(L, T, pw, ph); g.clip();
-  line((p) => x(p[0]), (p) => yT(p[4]), "rgba(251,191,36,.7)", 1.2);
-  line((p) => x(p[0]), (p) => y(p[3] / 100 * state.reactor.rated_w), "#64748b", 1.2);
-  line((p) => x(p[0]), (p) => y(p[2] / 100 * state.reactor.rated_w), css.getPropertyValue("--accent"), 2);
-  if (document.body.classList.contains("truth")) line((p) => x(p[0]), (p) => y(p[1]), "#e2e8f0", 1.2, [5, 4]);
+  line((p) => x(p[0]), (p) => yT(p[4]), col("--trend-fuel", "rgba(251,191,36,.7)"), 1.2);
+  line((p) => x(p[0]), (p) => y(p[3] / 100 * state.reactor.rated_w), col("--trend-ch4", "#64748b"), 1.2);
+  line((p) => x(p[0]), (p) => y(p[2] / 100 * state.reactor.rated_w), col("--trend-ch2", "#4fc3f7"), 2);
+  if (document.body.classList.contains("truth")) line((p) => x(p[0]), (p) => y(p[1]), col("--trend-true", "#e2e8f0"), 1.2, [5, 4]);
   g.restore();
 
   // legend
-  const items = [["CH2 log power", css.getPropertyValue("--accent")], ["CH4 safety", "#64748b"], ["Peak fuel temp", "#fbbf24"]];
-  if (document.body.classList.contains("truth")) items.push(["True power", "#e2e8f0"]);
+  const items = [["CH2 log power", col("--trend-ch2", "#4fc3f7")], ["CH4 safety", col("--trend-ch4", "#64748b")],
+    ["Peak fuel temp", col("--trend-fuel", "#fbbf24")]];
+  if (document.body.classList.contains("truth")) items.push(["True power", col("--trend-true", "#e2e8f0")]);
   let lx = L + 8;
   g.font = "11px " + css.getPropertyValue("--sans");
   for (const [label, color] of items) {
     g.fillStyle = color; g.fillRect(lx, T + 6, 10, 3);
-    g.fillStyle = "#9aa7b6"; g.fillText(label, lx + 14, T + 11);
+    g.fillStyle = col("--trend-text", "#9aa7b6"); g.fillText(label, lx + 14, T + 11);
     lx += g.measureText(label).width + 30;
   }
 }

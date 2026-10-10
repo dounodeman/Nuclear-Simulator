@@ -17,7 +17,8 @@ from __future__ import annotations
 import math
 
 from . import dims as D
-from .common import MeshBuilder, box, curved_text, cylinder, empty, add_light, FT, IN
+from .common import MeshBuilder, box, curved_text, text_width, cylinder, empty, add_light, FT, IN
+from . import props
 from .control_room import build_control_room
 from .core import build_core, lattice_xy
 
@@ -63,20 +64,15 @@ def build_room(parent, mats):
 
     # Doors: main personnel door (south, east end), west personnel door, north personnel door,
     # storage-room door (north, west end). Hallway scram push-button outside the main door.
+    # Each door is a hollow-metal leaf in a pressed-steel frame on the room-side face of its wall.
     doors = {
-        "Door_Main_South": ((6.0, y0 - t / 2, 0), "y"),
-        "Door_West": ((x0 - t / 2, -4.0, 0), "x"),
-        "Door_North": ((2.0, y1 + t / 2, 0), "y"),
-        "Door_StorageRoom_North": ((-3.5, y1 + t / 2, 0), "y"),
+        "Door_Main_South": ((6.0, y0, 0), 0.0),
+        "Door_West": ((x0, -4.0, 0), -math.pi / 2),
+        "Door_North": ((4.8, y1, 0), math.pi),             # east of the stair platform
+        "Door_StorageRoom_North": ((-3.5, y1, 0), math.pi),
     }
-    for nm, ((x, y, z), orient) in doors.items():
-        size = (D.DOOR_W, t + 0.02, D.DOOR_H) if orient == "y" else (t + 0.02, D.DOOR_W, D.DOOR_H)
-        fsize = (D.DOOR_W + 0.16, t + 0.06, D.DOOR_H + 0.08) if orient == "y" else (t + 0.06, D.DOOR_W + 0.16, D.DOOR_H + 0.08)
-        box(f"{nm}_Frame", (x, y, D.DOOR_H / 2 + 0.04), fsize, mats["door_frame"], root)
-        box(nm, (x, y, D.DOOR_H / 2), size, mats["door"], root)
-        # Radiation area sign on the inside face.
-        sx, sy = (x, y + (t / 2 + 0.02) * (1 if y < 0 else -1)) if orient == "y" else (x + t / 2 + 0.02, y)
-        box(f"{nm}_Sign", (sx, sy, 1.6), (0.25, 0.01, 0.18) if orient == "y" else (0.01, 0.25, 0.18), mats["sign_yellow"], root)
+    for nm, (pos, facing) in doors.items():
+        props.door(root, mats, nm, pos, facing, D.DOOR_W, D.DOOR_H, t)
     hb = cylinder("ui_Scram_Hallway", (6.9, y0 - t - 0.03, 1.3), 0.035, 0.04, mats["button_red"], root, 16, axis="y")
     hb["role"] = "manual_scram_hallway"
 
@@ -92,8 +88,21 @@ def build_room(parent, mats):
     cond.sweep([(x0 + 0.06, -2.0, 0.4), (x0 + 0.06, -2.0, 2.6)], 0.02, 8)
     cond.build("Conduit", mats["conduit"], root)
     green = MeshBuilder()
-    green.sweep([(x0 + 0.12, y0 + 0.3, 3.75), (x0 + 0.12, y1 - 0.12, 3.75), (x1 - 0.3, y1 - 0.12, 3.75)], 0.05, 12)
+    green.sweep([(x0 + 0.12, y0 + 0.3, 3.75), (x0 + 0.12, y1 - 0.12, 3.75), (x1 - 0.3, y1 - 0.12, 3.75)], 0.05, 16, bend=0.35)
+    for y in (y0 + 3.5, 0.5, y1 - 2.5):                                   # flanged joints
+        green.flange((x0 + 0.12, y, 3.75), "y", 0.05, 0.03)
     green.build("ProcessLine_Green", mats["pipe_green"], root)
+    brk = MeshBuilder()                                                  # wall brackets and U-bolts
+    for y in [y0 + 1.0 + 1.5 * k for k in range(int((y1 - y0 - 1.5) / 1.5) + 1)]:
+        brk.box((x0 + 0.06, y, 3.68), (0.12, 0.05, 0.03))
+        brk.box((x0 + 0.12, y, 3.808), (0.13, 0.03, 0.008))             # strap over the pipe
+    for x in [x0 + 1.5 + 1.5 * k for k in range(int((x1 - x0 - 2.0) / 1.5) + 1)]:
+        brk.box((x, y1 - 0.06, 3.68), (0.05, 0.12, 0.03))
+    for z in (2.6, 3.1, 3.4):                                            # conduit straps
+        for y in (y0 + 1.5, 0.0, y1 - 1.5):
+            brk.box((x0 + 0.03, y, z), (0.06, 0.04, 0.06))
+    brk.box((x0 + 0.08, -2.0, 2.65), (0.12, 0.14, 0.14))                # junction box
+    brk.build("PipeBrackets", mats["steel"], root)
     pan = MeshBuilder().box((x0 + 0.08, 0.5, 1.6), (0.16, 0.7, 0.9)).box((x0 + 0.08, 1.4, 1.5), (0.14, 0.4, 0.6))
     pan.build("PanelBoards_West", mats["door_frame"], root)
 
@@ -180,8 +189,15 @@ def build_pool(parent, mats):
     stripe.build("PoolTopStripe", mats["floor_stripe"], root)
     # The PUR-1 graphic on the black wall.
     a = D.GRAPHIC_ANGLE
-    curved_text("Graphic_PUR1", "PUR-1", mats["lettering_white"], R, a, 0.50, 0.62, parent=root)
-    curved_text("Graphic_Tagline", "THE NATION'S FIRST ALL-DIGITAL I&C", mats["lettering_gold"], R, a, 0.21, 0.10, parent=root)
+    # Bold white "PUR-1", the gold tagline, and "150 GIANT LEAPS" (Purdue's 150th) under it,
+    # left-aligned with the tagline, as in the photos.
+    curved_text("Graphic_PUR1", "PUR-1", mats["lettering_white"], R, a, 0.60, 0.50, parent=root)
+    tag = "THE NATION'S FIRST ALL-DIGITAL I&C"
+    curved_text("Graphic_Tagline", tag, mats["lettering_gold"], R, a, 0.31, 0.085, parent=root)
+    start = a - text_width(tag, 0.085) / 2 / R
+    for part, mat in (("150 ", "lettering_white"), ("GIANT", "lettering_gold"), ("LEAPS", "lettering_white")):
+        curved_text(f"Graphic_150_{part.strip()}", part, mats[mat], R, start, 0.18, 0.095, parent=root, align="LEFT")
+        start += (text_width(part, 0.095) + (0.04 if part == "150 " else 0.0)) / R
     # Steel tank, sand annulus, stainless liner, tank floor.
     MeshBuilder().tube((0, 0, D.TANK_BOTTOM_Z - 0.3), cav, cav - D.TANK_WALL, D.POOL_DEPTH + 0.3, 48).build("OuterSteelTank", mats["steel"], root)
     MeshBuilder().tube((0, 0, D.TANK_BOTTOM_Z - 0.3), cav - D.TANK_WALL, r + 0.012, D.POOL_DEPTH + 0.3, 48).build("SandAnnulus", mats["sand"], root)
@@ -204,30 +220,68 @@ def build_pool(parent, mats):
 
 
 def build_bridge_and_drives(parent, mats, core_objs):
-    """Bridge across the pool top (photos): a welded frame of square tube resting on the pool
-    wall, carrying the tall vertical drive tubes with black cables looped over the top."""
+    """Reactor top (photos): a bridge of round stainless girders and square-tube cross members
+    resting on the pool wall, with a galvanised bar-grating deck that leaves an opening over the
+    core; an aluminium cage over the core carrying the tall stainless drive tubes, each with its
+    motor and encoder head and a junction box; black cable bundles looping from the heads down to
+    the junction boxes and away along the bridge to the console side; guide tubes and the three
+    fixed ion-chamber tubes going down into the water; and the black pool-top exhaust duct."""
     root = empty("Bridge", (0, 0, 0), parent)
     R = D.SHIELD_OUTER_RADIUS
-    L = 2 * R + 0.5
+    L = 2 * R + 0.3
     bz = D.SHIELD_TOP_Z + 0.08
     W = D.BRIDGE_WIDTH
-    beam = MeshBuilder()
+    hole = 0.36                                   # half-width of the deck opening over the core (x)
+
+    # Girders, cross members and feet.
+    gird = MeshBuilder()
     for y in (-W / 2, W / 2):
-        beam.box((0, y, bz), (L, 0.10, 0.10))                 # main rails
-    for x in (-L / 2 + 0.2, -0.9, 0.0, 0.9, L / 2 - 0.2):
-        beam.box((x, 0, bz), (0.10, W, 0.10))                 # cross members
-    beam.box((0, 0, bz + 0.06), (L, W, 0.02))                 # deck plate
-    for x in (-L / 2 + 0.2, L / 2 - 0.2):                     # feet on the pool wall
+        gird.sweep([(-L / 2, y, bz), (L / 2, y, bz)], 0.06, 20)                         # lower girder
+        gird.sweep([(-L / 2 + 0.1, y, bz + 0.22), (L / 2 - 0.1, y, bz + 0.22)], 0.04, 16)   # upper rail
+        for x in (-L / 2 + 0.25, -1.3, -hole - 0.05, hole + 0.05, 1.3, L / 2 - 0.25):
+            gird.sweep([(x, y, bz), (x, y, bz + 0.22)], 0.018, 10)                       # rail posts
+    gird.build("Bridge_Structure", mats["stainless"], root)
+    frame = MeshBuilder()
+    for x in (-L / 2 + 0.15, -1.3, -hole - 0.05, hole + 0.05, 1.3, L / 2 - 0.15):
+        frame.box((x, 0, bz - 0.01), (0.08, W, 0.08))                                    # cross members
+    for x in (-L / 2 + 0.15, L / 2 - 0.15):                                              # feet on the pool wall
         for y in (-W / 2, W / 2):
-            beam.box((x, y, (D.SHIELD_TOP_Z + bz - 0.05) / 2), (0.14, 0.14, bz - 0.05 - D.SHIELD_TOP_Z))
-    # Upper frame that the drive tubes are clamped to.
-    for y in (-W / 2, W / 2):
-        beam.box((0, y, bz + 1.1), (1.6, 0.06, 0.06))
-    for x in (-0.8, 0.8):
-        beam.box((x, 0, bz + 1.1), (0.06, W, 0.06))
-        for y in (-W / 2, W / 2):
-            beam.box((x, y, bz + 0.6), (0.06, 0.06, 1.0))
-    beam.build("Bridge_Structure", mats["steel"], root)
+            frame.box((x, y, (D.SHIELD_TOP_Z + bz - 0.06) / 2 + 0.0), (0.16, 0.16, bz - 0.06 - D.SHIELD_TOP_Z + 0.02))
+            frame.box((x, y, D.SHIELD_TOP_Z + 0.005), (0.22, 0.22, 0.01))                # bearing plate
+    frame.build("Bridge_Frame", mats["aluminum"], root, bevel=0.004)
+
+    # Bar-grating deck on each side of the core opening, with toe boards along the edges.
+    grate = MeshBuilder()
+    dz = bz + 0.045
+    for xa, xb in ((-L / 2 + 0.12, -hole), (hole, L / 2 - 0.12)):
+        n_bear = int(W / 0.045)
+        for k in range(n_bear + 1):                                                      # bearing bars
+            y = -W / 2 + 0.03 + k * (W - 0.06) / n_bear
+            grate.box(((xa + xb) / 2, y, dz), (xb - xa, 0.005, 0.03))
+        n_cross = int((xb - xa) / 0.10)
+        for k in range(n_cross + 1):                                                     # cross rods
+            x = xa + k * (xb - xa) / n_cross
+            grate.box((x, 0, dz + 0.013), (0.006, W - 0.06, 0.006))
+        for y in (-W / 2 + 0.03, W / 2 - 0.03):
+            grate.box(((xa + xb) / 2, y, dz + 0.04), (xb - xa, 0.006, 0.11))             # toe boards
+        for x in (xa, xb):
+            grate.box((x, 0, dz), (0.008, W - 0.06, 0.03))                               # end bands
+    grate.build("Bridge_Grating", mats["grating"], root)
+
+    # Drive cage over the core: four aluminium square-tube posts and three ring frames.
+    cage_x, cage_y, cage_h = 0.32, 0.30, 2.3
+    cage = MeshBuilder()
+    for x in (-cage_x, cage_x):
+        for y in (-cage_y, cage_y):
+            cage.box((x, y, bz + cage_h / 2), (0.05, 0.05, cage_h))
+    for z in (bz + 0.10, bz + 0.9, bz + 1.7, bz + cage_h):
+        for y in (-cage_y, cage_y):
+            cage.box((0, y, z), (2 * cage_x + 0.05, 0.04, 0.04))
+        for x in (-cage_x, cage_x):
+            cage.box((x, 0, z), (0.04, 2 * cage_y + 0.05, 0.04))
+    for x in (-cage_x, cage_x):                                                          # cage feet onto the girders
+        cage.box((x, 0, bz + 0.03), (0.08, W, 0.04))
+    cage.build("Drive_Cage", mats["aluminum"], root, bevel=0.004)
 
     # Drive mechanisms over their core positions. Drive x,y from the lattice; the core is at x=y=0.
     pos = {k: lattice_xy(*v) for k, v in D.CONTROL_POSITIONS.items()}
@@ -235,54 +289,181 @@ def build_bridge_and_drives(parent, mats, core_objs):
     pos["NS"] = (sx - D.ELEMENT_W / 2 - 0.05, sy - D.ELEMENT_W / 2 - 0.05)
     fx, fy = lattice_xy(5, 5)
     pos["FC"] = (fx + D.ELEMENT_W / 2 + 0.03, fy)
-    tube_h = 2.2
-    cables = MeshBuilder()
+    heights = {"SS1": 2.75, "SS2": 2.75, "RR": 2.6, "NS": 2.2, "FC": 2.0}
+    core_top = D.GRID_PLATE_Z + D.NOZZLE_LENGTH + D.PLATE_LENGTH + D.HANDLE_LENGTH + 0.12
+    cables, yellow, boxes, heads = MeshBuilder(), MeshBuilder(), MeshBuilder(), MeshBuilder()
+    guides = MeshBuilder()
+    jb_spots = {"SS1": (cage_x + 0.09, -0.15), "SS2": (-cage_x - 0.09, -0.15), "RR": (cage_x + 0.09, 0.15),
+                "NS": (-cage_x - 0.09, 0.15), "FC": (0.0, cage_y + 0.08)}
     for i, name in enumerate(D.DRIVE_NAMES):
         x, y = pos[name]
+        th = heights[name]
         mb = MeshBuilder()
-        mb.cylinder((x, y, bz + 0.07), 0.045, tube_h, 16)                          # drive tube
-        mb.cylinder((x, y, bz + 0.07 + tube_h), 0.07, 0.16, 16)                    # motor head
-        mb.box((x, y, bz + 0.07 + 0.35), (0.12, 0.12, 0.12))                        # lower clamp
+        mb.cylinder((x, y, bz - 0.25), 0.045, th + 0.25, 20)                       # drive tube
+        for z in (bz + 0.10, bz + 0.9, bz + 1.7):                                   # clamps to the cage
+            mb.cylinder((x, y, z - 0.02), 0.055, 0.04, 20)
+        for z in [bz + 0.5 + 0.7 * k for k in range(int(th / 0.7))]:                # flanged joints
+            mb.cylinder((x, y, z), 0.06, 0.02, 20)
+        mb.flange((x, y, bz + th - 0.01), "z", 0.04, 0.025)
         ob = mb.build(f"Drive_{name}", mats["stainless"], root)
         ob["drive"] = name
-        # Black cable: up from the motor head, over in a loop, down to the cable tray on the frame.
-        zt = bz + 0.07 + tube_h + 0.16
-        loop = [(x, y, zt), (x, y, zt + 0.25 + 0.05 * i)]
-        for k in range(1, 8):
-            a = math.pi * k / 8
-            loop.append((x + 0.25 * (1 - math.cos(a)) * 0.5 + 0.3 * math.sin(a) * 0.2, y + 0.35 * math.sin(a),
-                         zt + 0.25 + 0.05 * i + 0.45 * math.sin(a)))
-        loop += [(x, y + 0.7 + 0.03 * i, zt - 0.4), (x, y + 0.7 + 0.03 * i, bz + 1.15)]
-        cables.sweep(loop, 0.014, 8)
-    cables.sweep([(-0.3, W / 2 + 0.3, bz + 1.15), (0.3, W / 2 + 0.3, bz + 1.15), (0.3, W / 2 + 0.3, bz + 0.1),
-                  (L / 2, W / 2 + 0.3, bz + 0.1)], 0.02, 8)   # trunk to the console side
+        zt = bz + th
+        heads.cylinder((x, y, zt), 0.072, 0.22, 24)                                 # motor
+        heads.cylinder((x, y, zt + 0.22), 0.055, 0.09, 20)                          # encoder
+        heads.box((x + 0.075, y, zt + 0.11), (0.05, 0.07, 0.09))                     # connector housing
+        # Guide tube from the bridge down through the water to just above the core.
+        if name in ("SS1", "SS2", "RR"):
+            guides.cylinder((x, y, core_top), 0.026, bz - 0.25 - core_top, 14)
+        # Junction box on the cage and the cable bundle from the motor: up, over in a loop, down.
+        jx, jy = jb_spots[name]
+        jz = bz + 1.25 + 0.08 * (i % 2)
+        boxes.box((jx, jy, jz), (0.12, 0.14, 0.20))
+        boxes.box((jx, jy, jz + 0.105), (0.13, 0.15, 0.01))                         # lid
+        ztop = zt + 0.31
+        side = 1 if jx >= 0 else -1
+        loop = [(x + 0.075, y, zt + 0.11), (x + 0.12, y, zt + 0.2), (x + 0.12, y, ztop + 0.15)]
+        for k in range(1, 9):
+            a = math.pi * k / 9
+            loop.append((x + 0.12 + side * 0.22 * (1 - math.cos(a)), y + 0.12 * math.sin(a), ztop + 0.15 + 0.35 * math.sin(a)))
+        loop += [(jx, jy, zt - 0.1), (jx, jy, jz + 0.11)]
+        cables.sweep(loop, 0.016, 8, bend=0.08)
+        # Bundle from the junction box down the cage and out to the east end of the bridge.
+        cables.sweep([(jx, jy + 0.04, jz - 0.10), (jx, jy + 0.04, bz + 0.16), (cage_x + 0.12, W / 2 - 0.12 + 0.025 * i, bz + 0.16),
+                      (L / 2 - 0.2, W / 2 - 0.12 + 0.025 * i, bz + 0.16)], 0.012, 8, bend=0.06)
+        if name in ("SS1", "RR"):                                                   # coiled slack on two heads
+            coil = [(x + 0.2 * math.cos(2 * math.pi * k / 16) * 0.6, y + 0.12 + 0.2 * math.sin(2 * math.pi * k / 16) * 0.6,
+                     zt - 0.35 - 0.012 * k) for k in range(48)]
+            cables.sweep(coil, 0.010, 6)
+    # Trunk off the east end of the bridge, down the pool wall and across the floor to the console.
+    trunk = [(L / 2 - 0.2, W / 2 - 0.05, bz + 0.16), (R + 0.05, W / 2 - 0.05, bz + 0.16), (R + 0.05, W / 2 - 0.05, 0.03),
+             (D.CONSOLE_POS[0] - 0.4, W / 2 - 0.05, 0.03)]
+    cables.sweep(trunk, 0.035, 10, bend=0.15)
+    yellow.sweep([(pos["FC"][0] + 0.06, pos["FC"][1], bz + heights["FC"] + 0.2), (pos["FC"][0] + 0.25, pos["FC"][1] + 0.1, bz + 2.6),
+                  (pos["FC"][0] + 0.45, pos["FC"][1] + 0.2, bz + 1.9), (cage_x + 0.1, cage_y + 0.08, bz + 1.3),
+                  (cage_x + 0.1, cage_y + 0.08, bz + 0.2)], 0.008, 6, bend=0.15)
     cables.build("DriveCables", mats["hv_cable"], root)
-    # Pool-top radiation area monitor on the bridge frame.
-    ram = MeshBuilder().box((0.9, W / 2 + 0.1, bz + 1.2), (0.12, 0.10, 0.18))
-    ram.build("RAM_PoolTop", mats["steel"], root)
+    yellow.build("DriveCable_Yellow", mats["cable_yellow"], root)
+    boxes.build("Drive_JunctionBoxes", mats["stainless"], root, bevel=0.006)
+    heads.build("Drive_MotorHeads", mats["rack"], root, bevel=0.004)
+    # Three fixed ion chambers in aluminium tubes on the edge of the core (one per safety channel).
+    for k, (ix, iy) in enumerate(((0.24, -0.06), (-0.22, 0.20), (0.06, -0.26))):
+        guides.cylinder((ix, iy, core_top - 0.3), 0.038, bz + 0.55 - (core_top - 0.3), 16)
+        guides.cylinder((ix, iy, bz + 0.55), 0.05, 0.08, 16)
+        cables.sweep([(ix, iy, bz + 0.63), (ix, iy, bz + 0.8), (cage_x - 0.05, iy, bz + 0.8)], 0.01, 6)
+    guides.build("Drive_GuideTubes", mats["aluminum"], root)
+    # Pool-top radiation area monitor on the cage.
+    ram = MeshBuilder().box((cage_x + 0.1, cage_y + 0.1, bz + 1.9), (0.12, 0.10, 0.18))
+    ram.cylinder((cage_x + 0.1, cage_y + 0.1, bz + 1.99), 0.012, 0.12, 8)
+    ram.build("RAM_PoolTop", mats["steel"], root, bevel=0.005)
+
+    # Pool-sweep exhaust: a black duct dropping from the ceiling beside the pool, turning in over
+    # the pool edge to a hood above the water (photos).
+    dx, dy = -1.75, 1.35
+    duct = MeshBuilder()
+    duct.box((dx, dy, (D.ROOM_H + 2.75) / 2), (0.28, 0.28, D.ROOM_H - 2.75))
+    duct.sweep([(dx, dy, 2.9), (dx, dy, 2.62), (-1.05, 0.8, 2.62)], 0.13, 16, bend=0.2)
+    duct.box((-1.05, 0.8, 2.52), (0.42, 0.34, 0.12))                                  # hood
+    for z in (3.6, 4.8, 6.0):
+        duct.box((dx, dy, z), (0.31, 0.31, 0.04))                                      # duct joints
+    duct.build("PoolExhaust_Duct", mats["duct_black"], root, bevel=0.01)
     return root
 
 
 def build_process_loop(parent, mats):
-    """Pump, filter, ion exchanger and chiller skid in the SW corner; 2 in lines over the parapet."""
-    root = empty("ProcessLoop", (-3.8, -4.6, 0), parent)
+    """Primary purification and cooling loop on a skid in the SW corner, piped the way the water
+    actually flows: a suction line hangs over the pool wall into the water, drops to the pump,
+    and the water goes pump -> filter -> mixed-bed ion exchanger -> chiller -> return line back
+    over the pool wall. 2 in stainless pipe with long-radius elbows, flanged connections, gate
+    valves on the suction and return, and trapeze hangers from the ceiling under the high runs
+    (no pool penetrations: both lines enter over the top)."""
+    ox, oy = -3.55, -4.7
+    root = empty("ProcessLoop", (ox, oy, 0), parent)
+    pcx, pcy = -ox, -oy                                   # pool centre in local coordinates
+    r = 0.03                                              # 2 in pipe
     skid = MeshBuilder().box((0, 0, 0.05), (2.6, 1.4, 0.10))
-    skid.build("Skid", mats["steel"], root)
-    MeshBuilder().cylinder((-1.0, -0.3, 0.1), 0.18, 0.5, 24, axis="x").cylinder((-0.55, -0.3, 0.1), 0.14, 0.4, 24).build("Pump_30gpm", mats["steel"], root)
-    MeshBuilder().cylinder((-0.1, 0.3, 0.1), 0.22, 1.2, 32).build("Filter", mats["stainless"], root)
-    MeshBuilder().cylinder((0.6, 0.3, 0.1), 0.28, 1.6, 32).build("IonExchanger_MixedBed", mats["stainless"], root)
+    for x in (-1.25, 1.25):
+        skid.box((x, 0, 0.05), (0.10, 1.4, 0.12))            # channel ends
+    skid.build("Skid", mats["steel"], root, bevel=0.004)
+    zc = 0.33                                             # pump centreline
+    pump = MeshBuilder()
+    pump.cylinder((-1.20, -0.3, zc), 0.15, 0.16, 28, axis="x")     # volute
+    pump.cylinder((-1.04, -0.3, zc), 0.06, 0.10, 16, axis="x")     # bearing frame
+    pump.box((-0.95, -0.3, 0.14), (0.62, 0.30, 0.08))               # baseplate
+    pump.cylinder((-1.20, -0.3, zc + 0.15), r * 1.1, 0.06, 14)      # discharge nozzle
+    pump.build("Pump_30gpm", mats["pipe_green"], root, bevel=0.004)
+    motor = MeshBuilder()
+    motor.cylinder((-0.94, -0.3, zc), 0.12, 0.34, 28, axis="x")
+    for k in range(8):                                    # cooling fins
+        motor.cylinder((-0.90 + k * 0.035, -0.3, zc), 0.13, 0.008, 28, axis="x")
+    motor.box((-0.78, -0.3, zc + 0.14), (0.12, 0.10, 0.08))           # terminal box
+    motor.build("Pump_Motor", mats["steel"], root, bevel=0.003)
+    flt = MeshBuilder().cylinder((-0.1, 0.3, 0.12), 0.22, 1.10, 32)
+    flt.sphere((-0.1, 0.3, 1.22), 0.22, 24, 6, z_min=0.0, scale=(1, 1, 0.5))
+    for z in (0.35, 1.0):
+        flt.cylinder((-0.1, 0.3, z), 0.235, 0.03, 32)                     # body flanges / bands
+    flt.build("Filter", mats["stainless"], root)
+    ix = MeshBuilder().cylinder((0.6, 0.3, 0.12), 0.28, 1.45, 32)
+    ix.sphere((0.6, 0.3, 1.57), 0.28, 24, 6, z_min=0.0, scale=(1, 1, 0.45))
+    ix.build("IonExchanger_MixedBed", mats["stainless"], root)
+    legs = MeshBuilder()
+    for (cx, cy, rr) in ((-0.1, 0.3, 0.22), (0.6, 0.3, 0.28)):
+        for k in range(3):
+            a = 2 * math.pi * k / 3 + 0.5
+            legs.box((cx + rr * 0.85 * math.cos(a), cy + rr * 0.85 * math.sin(a), 0.11), (0.05, 0.05, 0.03))
+    legs.build("Vessel_Feet", mats["steel"], root)
     ch = MeshBuilder().box((0.9, -0.3, 0.6), (0.9, 0.6, 1.0))
-    ch.build("Chiller_36kBtu", mats["duct"], root)
-    # Piping: from skid up, over the pool wall and down into the water (no penetrations below 8 ft above core).
-    pipe = MeshBuilder()
-    for k, (y, xe) in enumerate(((0.55, 2.8), (0.05, 2.9))):
-        pz = 2.2 + 0.12 * k
-        pipe.sweep([(0.6, y, 0.1), (0.6, y, pz), (xe, y, pz), (xe, 4.6 - 0.6, pz),
-                    (xe, 4.6 - 0.6, D.WATER_SURFACE_Z - 0.6)], 0.03, 12)
+    ch.build("Chiller_36kBtu", mats["duct"], root, bevel=0.01)
+    grill = MeshBuilder()
+    for k in range(9):                                    # condenser louvres on the front
+        grill.box((0.9, -0.605, 0.25 + k * 0.08), (0.8, 0.01, 0.03))
+    grill.build("Chiller_Louvres", mats["rack_front"], root)
+    MeshBuilder().box((1.36, -0.3, 0.95), (0.02, 0.18, 0.12)).build("Chiller_Controller", mats["panel"], root)
+
+    pipe, fl = MeshBuilder(), MeshBuilder()
+    vb, vw = MeshBuilder(), MeshBuilder()
+    ws = D.WATER_SURFACE_Z - 0.6
+    # Suction: from the pool, over the wall, along the high run, down to the pump inlet.
+    sx, sy = pcx - 1.00, pcy - 0.55
+    props.pipe_with_fittings(pipe, fl, [(sx, sy, ws), (sx, sy, 2.2), (sx, -0.75, 2.2), (-1.55, -0.75, 2.2),
+                                         (-1.55, -0.75, zc), (-1.55, -0.62, zc)], r, flange_ends=False)
+    pipe.sweep([(-1.55, -0.40, zc), (-1.55, -0.3, zc), (-1.36, -0.3, zc)], r, 14, bend=0.08)
+    fl.flange((-1.36, -0.3, zc), "x", r)
+    props.gate_valve(vb, vw, (-1.55, -0.51, zc), "y", r)
+    # Pump -> filter (top inlet).
+    props.pipe_with_fittings(pipe, fl, [(-1.20, -0.3, zc + 0.21), (-1.20, -0.3, 1.6), (-0.1, -0.3, 1.6),
+                                         (-0.1, 0.3, 1.6), (-0.1, 0.3, 1.33)], r)
+    # Filter -> ion exchanger, a low cross-over.
+    props.pipe_with_fittings(pipe, fl, [(0.12, 0.3, 0.40), (0.32, 0.3, 0.40)], r)
+    # Ion exchanger top -> chiller top.
+    props.pipe_with_fittings(pipe, fl, [(0.6, 0.3, 1.70), (0.6, 0.3, 1.9), (0.9, 0.3, 1.9), (0.9, -0.3, 1.9),
+                                         (0.9, -0.3, 1.1)], r)
+    # Return: chiller side outlet, valve, up to the high run and back over the wall into the pool.
+    rx, ry = pcx - 0.75, pcy - 0.80
+    props.pipe_with_fittings(pipe, fl, [(1.35, -0.3, 0.8), (1.42, -0.3, 0.8)], r)
+    props.gate_valve(vb, vw, (1.51, -0.3, 0.8), "x", r)
+    props.pipe_with_fittings(pipe, fl, [(1.60, -0.3, 0.8), (1.80, -0.3, 0.8), (1.80, -0.3, 2.34), (rx, -0.3, 2.34),
+                                         (rx, ry, 2.34), (rx, ry, ws)], r, flange_ends=False)
+    fl.flange((1.60, -0.3, 0.8), "x", r)
     pipe.build("ProcessPiping", mats["stainless"], root)
-    MeshBuilder().box((-1.1, 0.5, 1.0), (0.12, 0.10, 0.18)).build("RAM_WaterProcess", mats["steel"], root)
+    fl.build("ProcessPiping_Flanges", mats["stainless"], root)
+    vb.build("ProcessValves", mats["steel"], root)
+    vw.build("ProcessValve_Handwheels", mats["button_red"], root)
+    # Trapeze hangers from the ceiling under the high runs.
+    hang = MeshBuilder()
+    for y in (0.6, 2.2):
+        hang.box(((sx + rx) / 2, y, 2.15), (abs(rx - sx) + 0.25, 0.04, 0.04))
+        hang.box(((sx + rx) / 2, y, 2.29), (0.10, 0.04, 0.04))
+        for x in (min(sx, rx) - 0.1, max(sx, rx) + 0.1):
+            hang.cylinder((x, y, 2.13), 0.008, D.ROOM_H - 2.13, 8)
+    for x in (-0.6, 1.2):
+        hang.box((x, -0.75, 2.15), (0.04, 0.12, 0.04))
+        hang.cylinder((x, -0.75, 2.13), 0.008, D.ROOM_H - 2.13, 8)
+    hang.build("ProcessPiping_Hangers", mats["steel"], root)
+    MeshBuilder().box((-1.1, 0.5, 1.0), (0.12, 0.10, 0.18)).build("RAM_WaterProcess", mats["steel"], root, bevel=0.005)
     # Continuous air monitor near the pool.
-    MeshBuilder().box((2.6, 0.9, 0.55), (0.5, 0.5, 1.1)).build("CAM", mats["duct"], root)
+    cam = MeshBuilder().box((2.6, 0.9, 0.55), (0.5, 0.5, 1.1))
+    cam.cylinder((2.6, 0.9, 1.1), 0.03, 0.25, 12)          # sample inlet
+    cam.build("CAM", mats["duct"], root, bevel=0.008)
     return root
 
 

@@ -51,13 +51,18 @@ print(sim.status()["scram_causes"])      # period and power scrams
 
 ![The console in the reactor hall](docs/img/control_room.png)
 
-You are an operator standing in the PUR-1 reactor hall, modelled on the real room: the round
-black pool wall with the PUR-1 graphic and its yellow safety rim, the bridge with the five drive
-housings over the water, the stair up to the north platform, the tiled video wall on the east
-wall, the black digital I&C cabinets with their red LED readouts, and the desk console with
-three monitors and blue chairs a few steps from the pool. Walk around it in first person
+You are an operator standing in the PUR-1 reactor hall, modelled on the real room: painted
+block walls, the round black pool wall with the PUR-1 graphic and its yellow safety rim, the
+bridge over the water with its grating, drive cage and tall stainless drive tubes trailing black
+cable bundles, the black exhaust duct over the pool, the purification and cooling loop, the stair
+up to the north platform, the video wall on the east wall, the black digital I&C cabinets with
+their red LED readouts, the desk console with three monitors and blue chairs a few steps from
+the pool, and the diagnostics bench with its green chair. Walk around it in first person
 (WASD, Shift to run, mouse to look), climb the stair for a view down into the pool, and operate
 the reactor from the console:
+
+The workstations look like the plant's own late-1990s operator displays: grey window chrome,
+navy title bars, etched group boxes and white value fields.
 
 - **Workstation 1, reactor control** (left-hand monitor): the four neutron channels, rod
   drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
@@ -73,8 +78,17 @@ the reactor from the console:
 
 ![The hard-wired panel on the console](docs/img/console_panel.png)
 
-The monitors, rod position readouts, annunciator lamps and the 4 x 3 video wall show the live
-plant, and the blades in the core move with the rods. Esc opens a menu with the simulation
+The monitors, rod position readouts and annunciator lamps show the live plant, and the blades
+in the core move with the rods. The video wall is laid out like the real one: power and
+temperature trends down the left over a white plant schematic, a live underwater camera on the
+core across the middle, and the reactor status, a hall camera and the radiation monitors down
+the right.
+
+![The video wall](docs/img/video_wall.png)
+
+Esc leaves a workstation or opens the menu, and never takes the app out of full screen; F (or
+**Full screen** in the menu) switches full screen on and off. On a Mac the walk keys and the
+mouse do not set off the system alert sound. The menu has the simulation
 speed (1x to 100x), restart, true plant values and the instructor station, which injects
 experiments, rod and instrument faults, a chiller trip, a pool leak and protection failures.
 

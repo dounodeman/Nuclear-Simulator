@@ -96,6 +96,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "initial_states": INITIAL_STATES, "speeds": list(SPEEDS),
                 "models": models_dir() is not None,
                 "has_token": updates.token() is not None,
+                "native_window": self.server.on_fullscreen is not None,
             })
         elif p == "/api/update":
             self._json(self.server.check_update().to_dict())
@@ -128,6 +129,11 @@ class _Handler(BaseHTTPRequestHandler):
                 updates.set_token(body.get("token") or None)
                 self.server.last_update = None
                 self._json({"ok": True, "has_token": updates.token() is not None})
+            elif p == "/api/window/fullscreen":
+                if self.server.on_fullscreen is None:
+                    raise CommandError("no app window to make full screen")
+                self.server.on_fullscreen()
+                self._json({"ok": True})
             elif p == "/api/update/install":
                 info = self.server.check_update(force=True)
                 if not info.to_dict()["can_install"]:
@@ -153,6 +159,7 @@ class ControlRoomServer(ThreadingHTTPServer):
         self.session = session
         self.verbose = verbose
         self.on_quit = None  # set by the desktop shell so an update can close the window
+        self.on_fullscreen = None  # set by the desktop shell: toggles the native window's full screen
         self.last_update: updates.UpdateInfo | None = None
         self._update_lock = threading.Lock()
 

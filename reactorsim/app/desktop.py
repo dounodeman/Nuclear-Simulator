@@ -37,6 +37,7 @@ def run(initial: str = "cold", port: int = 0, browser: bool = False, verbose: bo
             window = webview.create_window(WINDOW_TITLE, server.url, width=1440, height=900,
                                            min_size=(1100, 700), background_color="#0d1117")
             server.on_quit = window.destroy
+            server.on_fullscreen = window.toggle_fullscreen
             webview.start()
         else:
             print(f"Control room running at {server.url}  (Ctrl+C to stop)")

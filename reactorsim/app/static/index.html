@@ -45,6 +45,7 @@
     <div class="form-row">
       <button id="truthToggle" class="ghost" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
       <button id="instructorToggle" class="ghost" aria-pressed="false">Instructor station</button>
+      <button id="fullscreenBtn" class="ghost" title="Full screen (F)">Full screen</button>
       <button id="updateBtn" class="ghost" title="Updates">Updates</button>
     </div>
     <h3>Controls</h3>
@@ -54,6 +55,7 @@
       <tr><td>Mouse</td><td>look around</td></tr>
       <tr><td>Click or E</td><td>use the workstation or button in front of you (hold for rod drives)</td></tr>
       <tr><td>Esc</td><td>leave a workstation, or open this menu</td></tr>
+      <tr><td>F</td><td>full screen on or off</td></tr>
     </table>
   </div>
 </div>
@@ -62,7 +64,7 @@
 <section class="station" id="station-reactor" hidden aria-label="Reactor control workstation">
   <div class="monitor">
     <div class="monitor-head">
-      <span>REACTOR CONTROL · Workstation 1</span>
+      <span>PUR-1 RCS - Reactor Control (Workstation 1)</span>
       <button class="ghost" data-close>Step away (Esc)</button>
     </div>
     <section class="annunciators" id="annunciators" aria-label="Annunciators"></section>
@@ -128,6 +130,7 @@
         </div>
       </section>
     </div>
+    <div class="hmi-status"><span data-status="msg">Ready</span><span>RTP 3000</span><span data-status="clock">--:--:--</span></div>
   </div>
 </section>
 
@@ -135,7 +138,7 @@
 <section class="station" id="station-plant" hidden aria-label="Plant data workstation">
   <div class="monitor">
     <div class="monitor-head">
-      <span>PLANT DATA · Workstation 2</span>
+      <span>PUR-1 DAS - Plant Data (Workstation 2)</span>
       <button class="ghost" data-close>Step away (Esc)</button>
     </div>
     <div class="station-grid plant">
@@ -163,6 +166,7 @@
         <ol id="events"></ol>
       </section>
     </div>
+    <div class="hmi-status"><span data-status="msg">Ready</span><span>Historian</span><span data-status="clock">--:--:--</span></div>
   </div>
 </section>
 
