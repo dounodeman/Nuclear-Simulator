@@ -107,6 +107,22 @@ def test_http_api(server):
     assert code == 403
 
 
+def test_fullscreen_goes_through_the_native_window(server):
+    """In a browser there is no app window: the page is told so and the route refuses. With the
+    desktop shell's hook set, the route toggles the native window's full screen."""
+    assert json.loads(_get(server, "/api/info")[2])["native_window"] is False
+    code, data = _post(server, "/api/window/fullscreen", {})
+    assert code == 400 and "no app window" in data["error"]
+    calls = []
+    server.on_fullscreen = lambda: calls.append(1)
+    try:
+        assert json.loads(_get(server, "/api/info")[2])["native_window"] is True
+        assert _post(server, "/api/window/fullscreen", {}) == (200, {"ok": True})
+        assert calls == [1]
+    finally:
+        server.on_fullscreen = None
+
+
 def test_static_files_cannot_escape(server):
     for path in ("/../pyproject.toml", "/%2e%2e/pyproject.toml", "/models/../../pyproject.toml"):
         with pytest.raises(urllib.error.HTTPError) as e:

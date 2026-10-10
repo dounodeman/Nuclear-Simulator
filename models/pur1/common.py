@@ -125,6 +125,14 @@ def palette() -> dict[str, bpy.types.Material]:
         "button_amber": material("ButtonAmber", (0.95, 0.65, 0.10), rough=0.4),
         "lamp": material("Lamp", (1.0, 1.0, 1.0), emit=(1.0, 1.0, 0.95), emit_strength=5.0),
         "chair": material("ChairFabric", (0.12, 0.28, 0.58), rough=0.9),
+        "keycap": material("KeyCap", (0.20, 0.20, 0.22), rough=0.55),
+        "mouse": material("MousePlastic", (0.10, 0.10, 0.11), rough=0.35),
+        "pc_case": material("PCCase", (0.12, 0.12, 0.13), rough=0.45, metal=0.3),
+        "door_glass": material("WiredGlass", (0.16, 0.20, 0.22), rough=0.08, metal=0.2),
+        "chair_green": material("ChairGreen", (0.35, 0.62, 0.22), rough=0.8),
+        "grating": material("GratingGalv", (0.55, 0.57, 0.58), rough=0.45, metal=0.7),
+        "duct_black": material("DuctBlack", (0.05, 0.05, 0.055), rough=0.6, metal=0.3),
+        "cable_yellow": material("CableYellow", (0.85, 0.70, 0.10), rough=0.6),
         "rack": material("Rack", (0.18, 0.19, 0.21), rough=0.5, metal=0.3),
         "rack_front": material("RackFront", (0.35, 0.36, 0.38), rough=0.5, metal=0.4),
         "led_green": material("LEDGreen", (0.1, 1.0, 0.2), emit=(0.1, 1.0, 0.2), emit_strength=4.0),
@@ -229,12 +237,28 @@ class MeshBuilder:
                 faces.append((i * sides + k, j * sides + k, j * sides + l, i * sides + l))
         return self._add(verts, faces, smooth=True)
 
-    def sweep(self, points, radius, sides=10):
-        """Tube of `radius` along a polyline (cables, pipes, conduit, handrails)."""
+    def sweep(self, points, radius, sides=10, bend=0.0, bend_steps=6):
+        """Tube of `radius` along a polyline (cables, pipes, conduit, handrails). With `bend` > 0
+        every interior corner is rounded with that bend radius, like a pipe elbow."""
         import mathutils
         pts = [mathutils.Vector(p) for p in points]
         if len(pts) < 2:
             return self
+        if bend > 0 and len(pts) > 2:
+            out = [pts[0]]
+            for i in range(1, len(pts) - 1):
+                a, p, b = pts[i - 1], pts[i], pts[i + 1]
+                d1, d2 = (p - a), (b - p)
+                if d1.length < 1e-6 or d2.length < 1e-6 or d1.normalized().dot(d2.normalized()) > 0.999:
+                    out.append(p)
+                    continue
+                r = min(bend, d1.length * 0.45, d2.length * 0.45)
+                t1, t2 = p - d1.normalized() * r, p + d2.normalized() * r
+                for k in range(bend_steps + 1):          # quadratic Bezier t1 -> p -> t2
+                    u = k / bend_steps
+                    out.append((1 - u) ** 2 * t1 + 2 * (1 - u) * u * p + u ** 2 * t2)
+            out.append(pts[-1])
+            pts = out
         rings = []
         for i, p in enumerate(pts):
             t_in = (pts[i] - pts[i - 1]).normalized() if i > 0 else None
@@ -268,7 +292,53 @@ class MeshBuilder:
                for i in range(segments + 1)]
         return self.sweep(pts, tube_radius, sides)
 
-    def build(self, name: str, mat: bpy.types.Material | None = None, parent=None, location=(0, 0, 0)) -> bpy.types.Object:
+    def sphere(self, center, radius, segments=16, rings=8, scale=(1, 1, 1), z_min=-1.0):
+        """UV sphere (or ellipsoid with `scale`); `z_min` > -1 cuts it flat below that fraction
+        of the radius, for domes such as a mouse or a chair caster."""
+        cx, cy, cz = center
+        sx, sy, sz = scale
+        verts, faces = [], []
+        lat0 = math.asin(max(-1.0, min(1.0, z_min)))
+        lats = [lat0 + (math.pi / 2 - lat0) * j / rings for j in range(rings + 1)]
+        for lat in lats[:-1]:
+            for i in range(segments):
+                a = 2 * math.pi * i / segments
+                verts.append((cx + sx * radius * math.cos(lat) * math.cos(a),
+                              cy + sy * radius * math.cos(lat) * math.sin(a), cz + sz * radius * math.sin(lat)))
+        top = len(verts)
+        verts.append((cx, cy, cz + sz * radius))
+        for j in range(rings - 1):
+            for i in range(segments):
+                k = (i + 1) % segments
+                faces.append((j * segments + i, j * segments + k, (j + 1) * segments + k, (j + 1) * segments + i))
+        last = (rings - 1) * segments
+        for i in range(segments):
+            faces.append((last + i, last + (i + 1) % segments, top))
+        base = len(self.verts)
+        self._add(verts, faces, smooth=True)
+        self._add([verts[i] for i in range(segments)], [tuple(reversed(range(segments)))])   # flat bottom
+        return self
+
+    def rotate_since(self, mark, pivot, axis, angle):
+        """Rotate every vertex added since `len(self.verts) == mark` about `pivot`."""
+        import mathutils
+        rot = mathutils.Matrix.Rotation(angle, 3, axis.upper())
+        pv = mathutils.Vector(pivot)
+        for i in range(mark, len(self.verts)):
+            self.verts[i] = tuple(rot @ (mathutils.Vector(self.verts[i]) - pv) + pv)
+        return self
+
+    def flange(self, center, axis, pipe_radius, thickness=0.02):
+        """Pipe flange: a disc about twice the pipe diameter, centred on `center`, normal to `axis`."""
+        r = pipe_radius * 2.1
+        cx, cy, cz = center
+        off = {"x": (cx - thickness / 2, cy, cz), "y": (cx, cy - thickness / 2, cz), "z": (cx, cy, cz - thickness / 2)}[axis]
+        return self.cylinder(off, r, thickness, 20, axis=axis)
+
+    def build(self, name: str, mat: bpy.types.Material | None = None, parent=None, location=(0, 0, 0),
+              bevel: float = 0.0, bevel_segments: int = 2) -> bpy.types.Object:
+        """Make the object. `bevel` rounds every hard edge by that width (applied on export), which
+        takes the toy-block look off furniture, doors and electronics."""
         mesh = bpy.data.meshes.new(name)
         mesh.from_pydata(self.verts, [], self.faces)
         mesh.validate()
@@ -281,33 +351,78 @@ class MeshBuilder:
         ob.location = location
         ob.parent = parent
         bpy.context.scene.collection.objects.link(ob)
+        if bevel > 0:
+            mod = ob.modifiers.new("Bevel", "BEVEL")
+            mod.width = bevel
+            mod.segments = bevel_segments
+            mod.limit_method = "ANGLE"
+            mod.angle_limit = math.radians(40)
+            mod.use_clamp_overlap = True
+            try:
+                mod.harden_normals = True
+                for poly in mesh.polygons:
+                    poly.use_smooth = True
+            except AttributeError:
+                pass
         return ob
 
 
-def curved_text(name, text, mat, radius, center_angle, z_center, size, depth=0.006, parent=None, bold=True):
-    """Lettering wrapped around a vertical cylinder of `radius` about the origin, facing outward,
-    centred at `center_angle` (radians) and height `z_center`. Built from Blender's default font."""
-    import mathutils
-    curve = bpy.data.curves.new(name + "_curve", "FONT")
+BOLD_FONTS = (   # first one found is used for the wall graphic; Blender's own font otherwise
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+)
+
+
+def _bold_font():
+    for path in BOLD_FONTS:
+        if os.path.exists(path):
+            return bpy.data.fonts.load(path, check_existing=True)
+    return None
+
+
+def _text_mesh(text, size, depth, align="CENTER"):
+    curve = bpy.data.curves.new("text_curve", "FONT")
     curve.body = text
     curve.size = size
     curve.extrude = depth / 2
-    curve.align_x = "CENTER"
+    curve.align_x = align
     curve.align_y = "CENTER"
-    if bold:
-        curve.font_bold = curve.font
-        curve.body_format[0].use_bold = False
-    tmp = bpy.data.objects.new(name + "_tmp", curve)
+    curve.resolution_u = 3        # the glyph outlines: enough for 0.5 m letters, far fewer triangles
+    font = _bold_font()
+    if font:
+        curve.font = font
+    tmp = bpy.data.objects.new("text_tmp", curve)
     bpy.context.scene.collection.objects.link(tmp)
     dg = bpy.context.evaluated_depsgraph_get()
     mesh = bpy.data.meshes.new_from_object(tmp.evaluated_get(dg))
     bpy.data.objects.remove(tmp, do_unlink=True)
     bpy.data.curves.remove(curve)
+    return mesh
+
+
+def text_width(text, size):
+    """Width of `text` set in the graphic's font at `size`, in metres."""
+    mesh = _text_mesh(text, size, 0.001, "LEFT")
+    xs = [v.co.x for v in mesh.vertices]
+    bpy.data.meshes.remove(mesh)
+    return (max(xs) - min(xs)) if xs else 0.0
+
+
+def curved_text(name, text, mat, radius, center_angle, z_center, size, depth=0.006, parent=None, align="CENTER"):
+    """Lettering wrapped around a vertical cylinder of `radius` about the origin, facing outward,
+    at `center_angle` (radians; the start of the text when align="LEFT") and height `z_center`.
+    Set in a bold sans (BOLD_FONTS) like the real graphic."""
+    import mathutils
+    mesh = _text_mesh(text, size, depth, align)
     for v in mesh.vertices:
         x, y, zz = v.co
         a = center_angle + x / radius
         r = radius + zz + depth / 2
         v.co = mathutils.Vector((r * math.cos(a), r * math.sin(a), z_center + y))
+    mesh.name = name
     mesh.validate()
     mesh.update()
     mesh.materials.append(mat)

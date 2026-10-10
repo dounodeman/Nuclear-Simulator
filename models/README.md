@@ -30,10 +30,16 @@ on Debian/Ubuntu) and `LIBGL_ALWAYS_SOFTWARE=1` when there is no GPU.
 
 - `pur1/dims.py` every dimension used, tagged `SOURCED` (a published number) or `ASSUMED` (a modelling choice). Change numbers here, not in the builders.
 - `pur1/common.py` scene reset, material palette, a `MeshBuilder` that accumulates boxes, cylinders, tubes and rings into one mesh, export and render helpers.
+- `pur1/props.py` furniture and fittings shared by the hall and the console area: office chairs, work tables, keyboards, mice, trackballs, monitors, PC towers, doors with frames, vision glass and hardware, gate valves and flanged pipe runs. Small parts get bevelled edges (a Bevel modifier, applied on export) so they catch the light.
 - `pur1/core.py` the core.
 - `pur1/control_room.py` desk console, video wall, I&C cabinets, diagnostics bench.
 - `pur1/reactor_hall.py` room, pool, shield, bridge and drives, process loop; places the core and the console area.
 - `build.py` entry point, cameras and lights for the previews.
+
+The models carry flat colours only. The app adds surface detail when it loads them
+(`reactorsim/app/static/textures.js`): painted block, epoxy speckle, carpet and chair fabric,
+brushed stainless and aluminium, acoustic ceiling tiles and so on, chosen by material name and
+projected in world metres. Keep the material names in `palette()` when renaming.
 
 Frame: pool centre at x = y = 0, reactor-room floor at z = 0, +X east (toward
 the console and video wall), +Y north, metres. The glTF exporter rotates to Y up.

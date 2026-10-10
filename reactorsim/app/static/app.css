@@ -280,3 +280,205 @@ table.keys td:first-child { font-family: var(--mono); color: var(--accent); widt
   .station-grid.reactor, .station-grid.plant { grid-template-columns: 1fr; grid-template-areas: none; }
   .station-grid.plant > * { grid-area: auto; }
 }
+
+/* ======================================================================
+   Workstation screens: a light, older plant HMI (late-1990s Windows NT
+   operator displays): grey window chrome with a navy title bar, etched
+   group boxes, sunken white value fields, bevelled push buttons and
+   segmented bar graphs. Scoped to .station so the hall's menus keep the
+   dark game look.
+   ====================================================================== */
+.station {
+  --hmi-face: #d4d0c8;       /* 3D face of chrome and buttons */
+  --hmi-light: #ffffff;
+  --hmi-shadow: #808080;
+  --hmi-dark: #404040;
+  --hmi-field: #ffffff;
+  --hmi-ground: #e8e6df;     /* panel background */
+  --hmi-text: #000000;
+  --hmi-label: #303030;
+  --hmi-navy: #0a246a;
+  --hmi-blue: #1c4fa0;
+  --hmi-amber: #ffc000;
+  --hmi-red: #e00000;
+  --hmi-green: #00a000;
+  --hmi-font: Tahoma, Verdana, "Segoe UI", Geneva, Arial, sans-serif;
+  --hmi-mono: "Lucida Console", "Courier New", Monaco, monospace;
+  /* trend colours read by drawTrend() */
+  --trend-bg: #ffffff;
+  --trend-grid: #c8c8c8;
+  --trend-text: #303030;
+  --trend-ch2: #0030c0;
+  --trend-ch4: #008000;
+  --trend-fuel: #c06000;
+  --trend-true: #000000;
+  --trend-limit: #e00000;
+  --accent: #0030c0;
+  --muted: #404040;
+  --dim: #606060;
+  --line: #808080;
+  --warn: #b06000;
+  --alarm: #d00000;
+  --text: #000000;
+  color-scheme: light;
+  background: rgba(20, 22, 26, .6);
+}
+.station .monitor {
+  background: var(--hmi-face); color: var(--hmi-text);
+  font: 12px/1.35 var(--hmi-font); -webkit-font-smoothing: auto;
+  border: 18px solid #bdb8a8; border-radius: 6px;           /* beige monitor bezel */
+  box-shadow: inset 0 0 0 1px #8a8576, 0 0 0 1px #6f6b60, 0 30px 80px rgba(0,0,0,.7);
+  padding: 0 4px 4px;
+}
+.station .monitor-head {
+  margin: 0 -4px 6px; padding: 3px 4px 3px 8px;
+  background: linear-gradient(90deg, var(--hmi-navy), #a6caf0);
+  color: #fff; font: bold 12px var(--hmi-font); letter-spacing: 0;
+}
+.station .monitor-head button { padding: 1px 8px; font-size: 11px; }
+.station h2 { font: bold 11px var(--hmi-font); letter-spacing: 0; text-transform: none; color: var(--hmi-navy); margin: 0 0 6px; }
+.station h3 { font: bold 11px var(--hmi-font); letter-spacing: 0; text-transform: none; color: var(--hmi-label); margin: 10px 0 4px; }
+.station .hint, .station .small { color: var(--hmi-label); font-size: 11px; }
+.station .digits { font-family: var(--hmi-mono); }
+
+/* Group boxes */
+.station .panel {
+  background: var(--hmi-ground); border-radius: 0; padding: 12px 10px 10px; position: relative;
+  border: 1px solid var(--hmi-shadow); box-shadow: inset 1px 1px 0 var(--hmi-light), 1px 1px 0 var(--hmi-light);
+}
+.station .panel > h2:first-child, .station .panel-head h2 {
+  position: absolute; top: -8px; left: 8px; padding: 0 4px; background: var(--hmi-face);
+}
+.station .panel-head { margin-top: 2px; }
+.station .panel-head h2 { position: static; background: none; padding: 0; }
+
+/* Buttons: raised bevel, pressed when held or on */
+.station button, .station select, .station input {
+  font: 12px var(--hmi-font); color: var(--hmi-text); border-radius: 0;
+}
+.station button {
+  background: var(--hmi-face); padding: 3px 10px;
+  border: 1px solid; border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light);
+  box-shadow: inset -1px -1px 0 var(--hmi-shadow), inset 1px 1px 0 #ece9e2;
+}
+.station button:hover { border-color: var(--hmi-light) var(--hmi-dark) var(--hmi-dark) var(--hmi-light); }
+.station button:active, .station button.held, .station button.toggle.on, .station .seg button.on {
+  border-color: var(--hmi-dark) var(--hmi-light) var(--hmi-light) var(--hmi-dark);
+  box-shadow: inset 1px 1px 0 var(--hmi-shadow); transform: none;
+}
+.station button.toggle.on, .station .seg button.on { background: #c3d7f0; color: var(--hmi-navy); font-weight: bold; }
+.station button.ghost { background: var(--hmi-face); }
+.station input, .station select {
+  background: var(--hmi-field); padding: 2px 4px;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station .seg button { margin-left: 0; }
+
+/* Annunciator window tiles */
+.station .annunciators { gap: 3px; padding: 0 0 8px; }
+.station .ann {
+  border-radius: 0; min-height: 36px; font: bold 10px/1.1 var(--hmi-font); letter-spacing: 0;
+  color: #505050; background: #f2f0ea;
+  border: 2px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+}
+.station .ann.lit-warn { background: var(--hmi-amber); color: #000; border-color: #8a6800 #ffe680 #ffe680 #8a6800; }
+.station .ann.lit-alarm { background: var(--hmi-red); color: #fff; border-color: #700000 #ff8080 #ff8080 #700000; }
+.station .ann.lit-ok { background: #58d058; color: #000; border-color: #207020 #b0f0b0 #b0f0b0 #207020; }
+
+/* Neutron channels: sunken value fields and segmented bar graphs */
+.station .channel { border-top: 1px solid var(--hmi-shadow); box-shadow: 0 -1px 0 var(--hmi-light); }
+.station .channel:first-of-type { border-top: 0; box-shadow: none; }
+.station .ch-name { color: var(--hmi-navy); }
+.station .ch-sub { color: var(--hmi-label); }
+.station .readout { gap: 6px; }
+.station .readout .big {
+  display: inline-block; min-width: 150px; text-align: right; padding: 1px 6px; font-size: 22px; color: #000;
+  background: var(--hmi-field);
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station .channel.fault .big { color: var(--alarm); background: #fff0c0; }
+.station .readout .unit { color: var(--hmi-label); }
+.station .bar {
+  height: 14px; border-radius: 0; background: var(--hmi-field);
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station .bar .fill {
+  inset: 2px auto 2px 2px; border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--hmi-blue) 0 8px, transparent 8px 10px);
+}
+.station .bar .fill.hot { background: repeating-linear-gradient(90deg, #d08000 0 8px, transparent 8px 10px); }
+.station .bar .fill.trip { background: repeating-linear-gradient(90deg, var(--hmi-red) 0 8px, transparent 8px 10px); }
+.station .bar .mark-line { background: var(--hmi-red); opacity: 1; }
+.station .bar .ticks { top: 15px; font: 9px var(--hmi-mono); color: var(--hmi-label); }
+.station .period, .station .period .digits { color: var(--hmi-label); }
+.station .period.short .digits { color: #b06000; font-weight: bold; }
+.station .period.trip .digits { color: var(--hmi-red); font-weight: bold; }
+.station .truth { color: #0030c0; }
+
+/* Control rods */
+.station .rod-name { font: bold 12px var(--hmi-font); color: var(--hmi-navy); }
+.station .rod-col {
+  background: var(--hmi-field); border-radius: 0;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station .rod-col .core-zone { background: #f8e8b0; border-color: #c0a040; }
+.station .rod-col .blade { background: #606870; border-radius: 0; }
+.station .rod.rr .blade { background: #7a3fb0; }
+.station .rod-col .drive { background: #e06000; box-shadow: none; }
+.station .rod-pos {
+  font: 14px var(--hmi-mono); background: var(--hmi-field); padding: 0 6px; min-width: 64px; text-align: right;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+}
+.station .rod-state { color: var(--hmi-label); font: bold 10px var(--hmi-font); letter-spacing: 0; }
+.station .rod-state.bad { color: var(--hmi-red); }
+.station .rod-state.moving { color: #0030c0; }
+.station .rod-btns button.held { background: #c3d7f0; }
+.station .rod-worth { color: var(--hmi-label); font: 11px var(--hmi-mono); }
+
+/* Servo, source, scram */
+.station .servo-err { color: var(--hmi-label); }
+.station .scram-box { border-top: 1px solid var(--hmi-shadow); box-shadow: 0 -1px 0 var(--hmi-light); }
+.station button.scram {
+  width: 108px; height: 108px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ff5a4a, #d01010 60%, #8a0000);
+  border: 8px solid #f0c000; box-shadow: 0 0 0 2px #404040, 0 3px 0 2px #202020;
+  color: #fff; font: bold 18px var(--hmi-font);
+}
+.station button.scram:active { box-shadow: 0 0 0 2px #404040; transform: translateY(2px); }
+
+/* Plant data: white trend and list boxes */
+.station #trend {
+  background: var(--trend-bg);
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station .view3d { border-radius: 0; border: 2px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow); }
+.station .kv .k, .station .rho .k { color: var(--hmi-label); }
+.station .kv .v, .station .rho .v { font-family: var(--hmi-mono); background: var(--hmi-field); padding: 0 6px; border: 1px solid #a0a0a0; }
+.station .kv .v.warn { background: var(--hmi-amber); color: #000; }
+.station .kv .v.alarm { background: var(--hmi-red); color: #fff; }
+.station .kv .v.true { color: #0030c0; }
+.station .rho .total { border-top: 1px solid var(--hmi-shadow); color: #000; }
+.station #events {
+  background: var(--hmi-field); font: 11px var(--hmi-mono); padding: 2px;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+  box-shadow: inset 1px 1px 0 var(--hmi-dark);
+}
+.station #events li { border-bottom: 1px solid #e6e6e6; }
+.station #events .t { color: #606060; }
+.station #events .kind { color: #404040; }
+.station #events li.scram, .station #events li.limit { background: #ffd8d8; }
+.station #events li.scram .kind, .station #events li.limit .kind { color: var(--hmi-red); }
+.station #events li.setback .kind, .station #events li.alarm .kind { color: #b06000; }
+.station #events li.operator .kind { color: #0030c0; }
+.station .hmi-status {
+  display: flex; gap: 2px; margin-top: 6px; font: 11px var(--hmi-font);
+}
+.station .hmi-status span {
+  padding: 1px 8px; border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
+}
+.station .hmi-status span:first-child { flex: 1; }
