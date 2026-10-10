@@ -3,6 +3,7 @@
 // workstations, which open as the station overlays below, and on its hard-wired buttons.
 import { ReactorView } from "./view3d.js";
 import { HallWorld } from "./world.js";
+import { startMenuBackground } from "./menubg.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -16,6 +17,7 @@ let trendWindow = 600;
 let view = null;          // core camera on the plant workstation
 let world = null;         // the walkable hall
 let station = null;       // open workstation: "reactor", "plant" or null
+let menuBg = null;        // the main menu's animated background, until the hall is entered
 const ann = {};           // annunciator states, shared with the hall's lamps
 
 // ------------------------------------------------------------------ API
@@ -298,8 +300,18 @@ async function toggleFullscreen() {
   }
 }
 
+// The first time the operator goes in, the main menu becomes the pause menu.
+function leaveMainMenu() {
+  if (!menuBg) return;
+  menuBg.stop();
+  menuBg = null;
+  document.body.classList.remove("main-menu");
+  $("#menuTitle").textContent = "PUR-1 Simulator - Menu";
+}
+
 function enterHall() {
   document.activeElement?.blur?.();   // keys go to the hall, not the menu button
+  leaveMainMenu();
   showMenu(false);
   if (!world) return;
   world.setActive(true);
@@ -307,6 +319,7 @@ function enterHall() {
 }
 
 async function openStation(name) {
+  leaveMainMenu();
   station = name;
   world?.setActive(false);
   $("#menu").hidden = true;
@@ -708,6 +721,7 @@ async function installUpdate() {
 // ------------------------------------------------------------------ boot
 
 async function boot() {
+  try { menuBg = startMenuBackground($("#menuBg")); } catch { /* decoration only */ }
   info = await api("/api/info");
   buildStatic();
   await poll();

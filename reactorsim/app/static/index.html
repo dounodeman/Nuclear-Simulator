@@ -9,7 +9,7 @@
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
 </head>
-<body>
+<body class="main-menu">
 <!-- The reactor hall, walked in first person -->
 <div id="world" class="world"></div>
 
@@ -17,8 +17,8 @@
 <div class="hud" id="hud">
   <div class="hud-top">
     <span class="mark">PUR-1</span>
-    <span id="clock" class="digits">00:00:00</span>
-    <span id="speedTag" class="speed-tag">1×</span>
+    <span id="clock" class="digits field">00:00:00</span>
+    <span id="speedTag" class="speed-tag field">1×</span>
   </div>
   <div id="banner" class="banner" hidden></div>
   <div class="crosshair" id="crosshair"></div>
@@ -26,38 +26,33 @@
   <div class="hud-help" id="hudHelp">WASD walk · Shift run · mouse look · click or E to use · Esc menu</div>
 </div>
 
-<!-- Menu: shown at start and on Esc -->
+<!-- Menu: the main menu at start (over an animated gauge panel) and the pause menu on Esc.
+     A plain window in the same look as the plant HMI. -->
 <div class="menu" id="menu">
-  <div class="menu-card">
-    <div class="menu-title"><span class="mark">PUR-1</span> Purdue University Reactor Number One</div>
-    <p class="menu-lead">You are in the reactor hall, just inside the main door on the east wall. The desk console with
-      the three monitors, the hard-wired rod drive buttons and the scram button stands northwest of the pool, facing
-      north, with the I&amp;C cabinets on its left and the video wall on the east wall to its right. Walk up to it to
-      operate the reactor.</p>
-    <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
-    <h3>Simulation speed</h3>
-    <div class="speed" id="speed" role="group" aria-label="Simulation speed"></div>
-    <h3>Start over</h3>
-    <div class="form-row">
-      <select id="initial" aria-label="Initial state"></select>
-      <button id="restart" class="ghost">Restart</button>
+  <canvas id="menuBg" class="menu-bg" aria-hidden="true"></canvas>
+  <div class="menu-card win" role="dialog" aria-labelledby="menuTitle">
+    <div class="win-title"><span id="menuTitle">PUR-1 Simulator - Main Menu</span></div>
+    <div class="win-body menu-body">
+      <div class="menu-head"><span class="menu-mark">PUR-1</span><span>Purdue University Reactor Number One</span></div>
+      <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
+      <fieldset class="group">
+        <legend>Simulation speed</legend>
+        <div class="speed" id="speed" role="group" aria-label="Simulation speed"></div>
+      </fieldset>
+      <fieldset class="group">
+        <legend>Start over</legend>
+        <div class="form-row">
+          <select id="initial" aria-label="Initial state"></select>
+          <button id="restart">Restart</button>
+        </div>
+      </fieldset>
+      <button id="truthToggle" class="toggle" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
+      <button id="instructorToggle" class="toggle" aria-pressed="false">Instructor station</button>
+      <button id="fullscreenBtn" title="Full screen (F)">Full screen</button>
+      <button id="updateBtn" title="Updates">Updates</button>
     </div>
-    <h3>Tools</h3>
-    <div class="form-row">
-      <button id="truthToggle" class="ghost" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
-      <button id="instructorToggle" class="ghost" aria-pressed="false">Instructor station</button>
-      <button id="fullscreenBtn" class="ghost" title="Full screen (F)">Full screen</button>
-      <button id="updateBtn" class="ghost" title="Updates">Updates</button>
-    </div>
-    <h3>Controls</h3>
-    <table class="keys">
-      <tr><td>W A S D / arrows</td><td>walk</td></tr>
-      <tr><td>Shift</td><td>run</td></tr>
-      <tr><td>Mouse</td><td>look around</td></tr>
-      <tr><td>Click or E</td><td>use the workstation or button in front of you (hold for rod drives)</td></tr>
-      <tr><td>Esc</td><td>leave a workstation, or open this menu</td></tr>
-      <tr><td>F</td><td>full screen on or off</td></tr>
-    </table>
+    <div class="win-status"><span>Operate the reactor from the console northwest of the pool.</span></div>
+    <div class="win-status"><span>WASD walk · Shift run · mouse look · click or E use · Esc menu · F full screen</span></div>
   </div>
 </div>
 
@@ -171,8 +166,9 @@
   </div>
 </section>
 
-<aside class="drawer" id="instructor" hidden aria-label="Instructor station">
-  <div class="drawer-head"><h2>Instructor station</h2><button class="ghost" id="closeInstructor">Close</button></div>
+<aside class="drawer win" id="instructor" hidden aria-label="Instructor station">
+  <div class="win-title"><span>PUR-1 Instructor Station</span><button id="closeInstructor" title="Close">Close</button></div>
+  <div class="win-body">
   <p class="hint">Faults and events the operator does not control. Everything you do here goes in the event log.</p>
   <h3>Experiment reactivity</h3>
   <div class="form-row">
@@ -205,11 +201,13 @@
     <label class="check"><input type="checkbox" id="failPeriod"> Period trips failed</label>
     <label class="check"><input type="checkbox" id="failRad"> Radiation trips failed</label>
   </div>
+  </div>
 </aside>
 
-<dialog id="updateDlg">
+<dialog id="updateDlg" class="win">
   <form method="dialog">
-    <h2>Updates</h2>
+    <div class="win-title"><span>PUR-1 Simulator - Updates</span></div>
+    <div class="win-body">
     <p id="updMsg" class="upd-msg">Checking…</p>
     <pre id="updNotes" class="upd-notes" hidden></pre>
     <div id="tokenRow" class="token-row">
@@ -221,9 +219,10 @@
     <div class="dlg-actions">
       <span id="buildInfo" class="hint"></span>
       <span class="spacer"></span>
-      <button value="cancel" class="ghost">Close</button>
-      <button id="saveToken" type="button" class="ghost">Save token</button>
+      <button value="cancel">Close</button>
+      <button id="saveToken" type="button">Save token</button>
       <button id="installBtn" type="button" hidden>Install and restart</button>
+    </div>
     </div>
   </form>
 </dialog>
