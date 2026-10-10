@@ -5,6 +5,8 @@ Tag each value: SOURCED (a published number, see docs/pur1_reference.md and the
 choice that no retrievable drawing fixes yet; refine when the SAR drawings
 ML111890201 / ML070920272 Fig. 4-1 or the reference photos are in hand).
 """
+import math
+
 from .common import FT, IN
 
 # ---- Pool and shield ---------------------------------------------------------
@@ -21,8 +23,7 @@ SHIELD_OUTER_RADIUS = 2.0            # ASSUMED from the reference photos: the bl
 SHIELD_BELOW_HALF = 3.5              # ASSUMED: half-width of the square concrete block below floor
 POOL_LIP_WIDTH = 0.18                # ASSUMED (photos): grey top lip around the water opening
 POOL_STRIPE_WIDTH = 0.10             # ASSUMED (photos): yellow stripe on the outer edge of the top lip
-FLOOR_STRIPE_RADIUS = SHIELD_OUTER_RADIUS + 0.75   # ASSUMED (photos): yellow floor stripe around the pool
-GRAPHIC_ANGLE = -0.55                # ASSUMED: the PUR-1 lettering faces the console and the main door (radians from +X)
+GRAPHIC_ANGLE = math.radians(231)   # ASSUMED (map): the PUR-1 lettering on the SW face of the pool wall
 
 # ---- Core --------------------------------------------------------------------
 GRID_PITCH = 3.0 * IN                # ASSUMED: lattice pitch (element footprint ~7 cm + clearance)
@@ -45,7 +46,8 @@ BLADE_THICK = 0.0048                 # ASSUMED: 3/16 in borated-SS blade
 BLADE_WIDTH = 0.060                  # ASSUMED: blade width inside the control-assembly slot
 BLADE_LENGTH = 0.70                  # ASSUMED: slightly longer than the active length
 ROD_TRAVEL = 0.6412                  # SOURCED: RR upper limit 64.12 cm
-# Lattice positions (row, col), 1-based, SS1 at 4-4 per SAR08 bundle-power table.
+# Core positions (row, col) in the 4 x 4, 1-based, rows numbered from the north as on the SAR core
+# map: SS1 at 4-4 (SE) per the SAR08 bundle-power table; SS2 NW and RR NE as on the layout map.
 CONTROL_POSITIONS = {"SS1": (4, 4), "SS2": (1, 1), "RR": (1, 4)}   # SS1 SOURCED, SS2/RR ASSUMED
 IRRADIATION_SIDE = "east"            # ASSUMED: the 6 graphite assemblies with Al tubes (F4-F9) on one side
 IRRADIATION_TUBE_R = 0.028           # ASSUMED: tube fits inside the 7 cm can (sources say up to 3.5 in samples)
@@ -53,28 +55,43 @@ IRRADIATION_TUBE_R = 0.028           # ASSUMED: tube fits inside the 7 cm can (s
 # ---- Drives and bridge -------------------------------------------------------
 BRIDGE_Z = SHIELD_TOP_Z + 0.10       # ASSUMED: bridge deck just above the shield top
 BRIDGE_WIDTH = 0.90                  # ASSUMED
+BRIDGE_ANGLE = math.radians(135)     # ASSUMED (photos, map): the bridge runs NW-SE across the pool
 DRIVE_HOUSING = (0.25, 0.25, 0.80)   # ASSUMED: motor + lead-screw housing size
 DRIVE_NAMES = ["SS1", "SS2", "RR", "NS", "FC"]   # SOURCED: five drives
 
 # ---- Room (B70A) -------------------------------------------------------------
-ROOM_X = (-5.0, 9.0)                 # ASSUMED: 14 m east-west
-ROOM_Y = (-6.0, 6.0)                 # ASSUMED: 12 m north-south (gross ~168 m2 incl. shield)
+# Layout from the project's PUR-1 layout map (maps/pur1_layout_map.png, drawn from the
+# reference photos and published documents): pool centre at the origin, +X east, +Y north.
+ROOM_X = (-7.2, 4.4)                 # ASSUMED (layout map): about 11.6 m east-west
+ROOM_Y = (-5.0, 4.2)                 # ASSUMED (layout map): about 9.2 m north-south
 ROOM_H = 7.0                         # ASSUMED: high bay; free volume comfortably > 424 m3 (TS minimum)
 WALL_T = 0.30                        # ASSUMED: concrete block
-DOOR_W, DOOR_H = 1.0, 2.1            # ASSUMED: personnel doors (3) + storage-room door (1)
+DOOR_W, DOOR_H = 0.9, 2.1            # ASSUMED: personnel doors
+MAIN_DOOR_Y = -4.15                  # ASSUMED (layout map): main door with EXIT sign, east wall, SE corner
+STORAGE_DOOR_Y = -2.95               # ASSUMED (layout map): storage-room door, west wall
+LAB_OPENING_X = (-1.2, 0.4)          # ASSUMED (layout map): opening in the north wall to the adjacent lab
+LAB = (-3.6, 1.4, 4.2, 7.9)          # ASSUMED (layout map): adjacent lab (B70B?) x0, x1, y0, y1
+LAB_H = 3.0                          # ASSUMED: ordinary ceiling height in the lab
+SOFFIT = (-7.2, 0.4, 3.4, 3.3)       # ASSUMED (photos): white bulkhead along the north side: x0, x1, y0, underside z
+FLOOR_STRIPE_RADIUS = 2.6            # ASSUMED (photos, map): yellow floor stripe around the pool
 
-# ---- Console and video wall --------------------------------------------------
-CONSOLE_POS = (4.6, 1.3, 0.0)        # ASSUMED (photos): desk console a few feet east of the pool, operator faces +X
+# ---- Console, cabinets and video wall ------------------------------------------
+CONSOLE_POS = (-3.5, 2.75, 0.0)      # ASSUMED (map, photos): desk console NW of the pool, operator faces north
+CONSOLE_FACING = math.pi / 2         # the console is built with the operator facing +X; turn it to face +Y
 CONSOLE_SIZE = (0.80, 2.00, 0.74)    # ASSUMED (photos): desk depth x width x height
 CONSOLE_MONITORS = 3                 # ASSUMED (photos): three monitors on the desk, one of them the RTP operator display
-MAT_SIZE = (2.6, 3.2)                # ASSUMED (photos): dark carpet mat under the console
+CARPET = [(-6.0, -1.0, -4.7, 1.2), (-6.0, 1.2, -1.9, 3.35)]   # ASSUMED (map): L-shaped mat under console and cabinets
 CABINET_SIZE = (0.80, 0.60, 2.10)    # ASSUMED (photos): black digital I&C cabinets (depth, width, height)
-CABINET_COUNT = 4                    # ASSUMED (photos): four cabinets in a row behind the console
-CABINET_FIRST_Y = -2.3               # ASSUMED: cabinets along the east wall, south of the video wall, running south
-DIAG_BENCH_POS = (3.6, -5.35, 0.0)   # ASSUMED (photos): diagnostics bench against the south wall, west of the main door
-STAIR_ORIGIN = (-2.6, 5.0, 0.0)      # ASSUMED (photos): stair up to a platform along the north wall (1 m wide treads)
-STAIR_RISE, STAIR_RUN, STAIR_STEPS = 0.19, 0.27, 11   # ASSUMED: 2.1 m platform height
-PLATFORM_SIZE = (3.0, 1.4)           # ASSUMED: platform length (x) by depth (y)
+CABINET_COUNT = 4                    # ASSUMED (photos): four cabinets in a row on the operator's left
+CABINET_ROW = (-6.2, -0.3)           # ASSUMED (map): first cabinet centre; the row runs north, fronts face east
+CABLE_POST = (-2.1, 1.75)            # ASSUMED (map): black cable gantry from the bridge comes down a post here
+WALL_DISPLAY_X = -3.0                # ASSUMED (map): wall display on the north wall above the console
+DIAG_BENCH_POS = (-1.55, 7.35, 0.0)  # ASSUMED (map): diagnostics bench along the lab's north wall
+VIDEO_WALL_CENTER_Y = -0.1           # ASSUMED (map): 4 x 3 video wall on the east wall, y -2.9 .. 2.7
+STAIR_ORIGIN = (0.75, 3.25, 0.0)     # ASSUMED (map): stair along the north wall rising east
+STAIR_RISE, STAIR_RUN, STAIR_STEPS = 0.19, 0.24, 11   # ASSUMED: 2.1 m platform height
+PLATFORM_SIZE = (1.0, 1.35)          # ASSUMED (map): NE platform, x 3.4 .. 4.4, y 2.85 .. 4.2
+SKID_POS = (-5.25, -4.4)             # ASSUMED (map): purification skid in the SW corner
 VIDEO_WALL_PANEL = (1.44, 0.81)      # ASSUMED: 65 in 16:9 panels
 VIDEO_WALL_GRID = (4, 3)             # derived: 12 x 1.17 m2 = 14 m2 = 150 ft2 (SOURCED total area)
 VIDEO_WALL_CENTER_Z = 2.3            # ASSUMED

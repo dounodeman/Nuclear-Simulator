@@ -19,7 +19,8 @@ interface (reactorsim/app/static/world.js) can find them by name:
   ui_Readout_{drive}                     drive position readouts
   ui_MagnetPower_Switch                  shim-safety magnet power supply
   ui_Annunciator_{n}                     annunciator window tiles
-All screens face west (-X), towards the operator.
+Screens are built facing local -X, towards the operator; the console and the wall display are
+turned so their screens face south, and the video wall faces west.
 """
 from __future__ import annotations
 
@@ -40,16 +41,14 @@ def _monitor(parent, mats, name, x_back, y, z_base, w=MONITOR_W, h=MONITOR_H, ro
     return props.monitor(parent, mats, name, screen, x_back, y, z_base, w, h, role, stand, slim_foot)
 
 
-def build_console(parent, mats, origin=(0, 0, 0)):
-    """Desk console at `origin` (floor level, centre of the desk footprint); operator faces +X."""
+def build_console(parent, mats, origin=(0, 0, 0), facing=0.0):
+    """Desk console at `origin` (floor level, centre of the desk footprint). It is built with the
+    operator facing local +X and then turned by `facing` about the vertical."""
     ox, oy, oz = origin
     root = empty("Console", (ox, oy, oz), parent)
+    root.rotation_euler = (0, 0, facing)
     depth, width, h = D.CONSOLE_SIZE
     out = {"root": root}
-
-    # Carpet mat under the console and chairs.
-    mw, ml = D.MAT_SIZE
-    box("CarpetMat", (-0.45, 0, 0.004), (mw, ml, 0.008), mats["carpet"], root)
 
     # Black desk: thin top, two pedestals, modesty panel at the back, cable tray.
     desk = MeshBuilder()
@@ -146,12 +145,13 @@ def build_video_wall(parent, mats, wall_x, center_y, center_z):
 CABINET_LABELS = ["RTP3000_RPS_RCS", "Mirion_NI_Channels", "Historian_DataDiode", "UPS_30min"]
 
 
-def build_cabinets(parent, mats, origin, count, spacing=None, direction=-1):
-    """Row of tall black digital I&C cabinets along a wall, fronts facing -X.
-    origin = centre of the first cabinet footprint; the row runs along +Y * direction."""
+def build_cabinets(parent, mats, origin, count, spacing=None, direction=-1, facing=0.0):
+    """Row of tall black digital I&C cabinets, fronts facing local -X, turned by `facing`.
+    origin = centre of the first cabinet footprint; the row runs along local +Y * direction."""
     d, w, h = D.CABINET_SIZE
     spacing = spacing or w + 0.03
     root = empty("ICCabinets", origin, parent)
+    root.rotation_euler = (0, 0, facing)
     for i in range(count):
         y = direction * i * spacing
         name = f"Cabinet_{i + 1}_{CABINET_LABELS[i % len(CABINET_LABELS)]}"
@@ -186,66 +186,91 @@ def build_cabinets(parent, mats, origin, count, spacing=None, direction=-1):
     return root
 
 
-def build_diag_bench(parent, mats, origin):
-    """Diagnostics bench against the south wall: a blue-legged table with three monitors, a wall monitor,
-    a small instrument rack and a whiteboard. The table runs along X; the analyst sits on the north side."""
+def build_diag_bench(parent, mats, origin, wall_dist=0.55, facing=math.pi):
+    """Real-time diagnostics bench (photo P2): a blue-legged table with three monitors, a wall
+    monitor, the RTP 3000 PLC rack at one end, a laptop and two PCs. Built with the analyst on
+    local +Y and the wall `wall_dist` behind the bench on local -Y, then turned by `facing`
+    (pi: the bench stands along a north wall, analyst facing north)."""
     ox, oy, oz = origin
     root = empty("DiagBench", (ox, oy, oz), parent)
-    length, depth, h = 2.4, 0.76, 0.74
+    root.rotation_euler = (0, 0, facing)
+    length, depth, h = 2.1, 0.70, 0.74
     table = props.work_table(root, mats, "DiagBench", (0, 0, 0), length, depth, h)
     table.rotation_euler = (0, 0, math.pi)          # modesty panel towards the wall (-Y)
-    # Three monitors on the bench, screens facing -Y (towards the analyst), built along X then rotated.
+    # Three monitors on the bench, screens facing local +Y (towards the analyst), built along X then rotated.
     mon = empty("DiagBench_Monitors", (0, 0, 0), root)
-    mon.rotation_euler = (0, 0, -math.pi / 2)       # local (x, y) -> world (y, -x): screens (local -X) face world +Y
-    for i, dx in enumerate((-0.75, 0.0, 0.75)):
-        _monitor(mon, mats, f"DiagBench_Monitor_{i + 1}", 0.30, dx, h, w=0.52, h=0.30)
-    for i, dx in enumerate((-0.75, 0.0, 0.75)):
+    mon.rotation_euler = (0, 0, -math.pi / 2)       # local (x, y) -> (y, -x): screens (local -X) face +Y
+    for i, dx in enumerate((-0.6, 0.0, 0.6)):
+        _monitor(mon, mats, f"DiagBench_Monitor_{i + 1}", 0.28, dx, h, w=0.50, h=0.29)
+    for i, dx in enumerate((-0.6, 0.0, 0.6)):
         props.keyboard(root, mats, f"DiagBench_Keyboard_{i + 1}", (dx, 0.08, h), facing=-math.pi / 2)
-    props.mouse(root, mats, "DiagBench_Mouse", (0.36, 0.10, h), facing=-math.pi / 2, pad_size=(0.18, 0.20))
+    props.mouse(root, mats, "DiagBench_Mouse", (0.30, 0.10, h), facing=-math.pi / 2, pad_size=(0.18, 0.20))
     lap = MeshBuilder().box((0.0, 0.0, 0.01), (0.32, 0.22, 0.02))
     lap.box((0.0, -0.11, 0.12), (0.32, 0.012, 0.21))                               # open lid
-    lap.build("DiagBench_Laptop", mats["pc_case"], empty("DiagBench_LaptopFrame", (1.0, 0.02, h), root), bevel=0.004)
-    for i, dx in enumerate((-1.0, 0.9)):
+    lap.build("DiagBench_Laptop", mats["pc_case"], empty("DiagBench_LaptopFrame", (0.88, 0.02, h), root), bevel=0.004)
+    for i, dx in enumerate((-0.85, 0.75)):
         props.pc_tower(root, mats, f"DiagBench_PC_{i + 1}", (dx, -0.10, 0), facing=-math.pi / 2)
-    # Small instrument rack at the west end of the bench and a wall monitor + whiteboard on the wall behind.
-    rk = MeshBuilder().box((-length / 2 - 0.35, 0.0, 0.60), (0.50, 0.55, 1.20))
+    # RTP 3000 PLC rack (FPGA, Siemens S7, PDU, APC 1500 UPS) at the west end of the bench, a wall
+    # monitor with the R-TIME screen on the wall behind.
+    rx = length / 2 + 0.35 if abs(facing - math.pi) < 1e-6 else -length / 2 - 0.35
+    rk = MeshBuilder().box((rx, 0.0, 0.60), (0.55, 0.55, 1.20))
     rk.build("DiagBench_Rack", mats["rack"], root, bevel=0.006)
     rkm = MeshBuilder()
     for u in range(4):
-        rkm.box((-length / 2 - 0.35, -0.28, 0.20 + u * 0.26), (0.46, 0.008, 0.20))
+        rkm.box((rx, 0.28, 0.20 + u * 0.26), (0.50, 0.008, 0.20))
     rkm.build("DiagBench_Rack_Modules", mats["rack_front"], root)
-    wall_y = D.ROOM_Y[0]
-    dy = wall_y - oy
     wm = empty("DiagBench_WallMonitor", (0, 0, 0), root)
     wm.rotation_euler = (0, 0, -math.pi / 2)
-    _monitor(wm, mats, "DiagBench_WallMonitor_1", -dy - 0.02, -0.3, 1.45, w=1.10, h=0.62, stand=False)
-    box("Whiteboard", (1.1, dy + 0.02, 1.55), (1.2, 0.02, 0.9), mats["whiteboard"], root)
-    box("Whiteboard_Tray", (1.1, dy + 0.04, 1.10), (1.2, 0.05, 0.02), mats["conduit"], root)
+    _monitor(wm, mats, "DiagBench_WallMonitor_1", wall_dist - 0.02, -0.15, 1.45, w=0.90, h=0.51, stand=False)
     props.office_chair(root, mats, (0.0, 0.75, 0), "DiagBench_Chair", facing=-math.pi / 2, seat_mat="chair_green")
     return root
 
 
-def build_control_room(parent, mats):
-    """Console + video wall + cabinets + diagnostics bench in the hall frame (pool centre = origin)."""
+def build_wall_display(parent, mats):
+    """Large display on the north wall above the console (layout map item 14); it shows the core
+    camera. The screen faces south, towards the operator."""
+    root = empty("WallDisplay", (D.WALL_DISPLAY_X, D.ROOM_Y[1], 0.0), parent)
+    root.rotation_euler = (0, 0, math.pi / 2)        # local -X (screen normal) -> world -Y
+    props.monitor(root, mats, "WallDisplay_Console", "ui_WallDisplay_Console", 0.0, 0.0, 1.85, 1.10, 0.62,
+                  "wall_display_core_camera", stand=False)
+    return root
+
+
+def build_carpet(parent, mats):
+    mb = MeshBuilder()
+    for (x0, y0, x1, y1) in D.CARPET:
+        mb.box_minmax((x0, y0, 0.0), (x1, y1, 0.008))
+    return mb.build("CarpetMat", mats["carpet"], parent)
+
+
+def build_control_room(parent, mats, with_lab=True, with_video_wall=True):
+    """Operator area in the hall frame (pool centre = origin), after the layout map: the console
+    NW of the pool with the operator facing north, the I&C cabinets on the operator's left along the
+    west side with their fronts facing east, the carpet mat under both, the wall display above the
+    console, the video wall on the east wall, and the diagnostics bench in the adjacent lab."""
     out = {}
-    out["console"] = build_console(parent, mats, D.CONSOLE_POS)
-    wall_inner_x = D.ROOM_X[1]
-    out["video_wall"] = build_video_wall(parent, mats, wall_inner_x, D.CONSOLE_POS[1], D.VIDEO_WALL_CENTER_Z)
-    d, w, h = D.CABINET_SIZE
-    out["cabinets"] = build_cabinets(parent, mats, (wall_inner_x - d / 2 - 0.05, D.CABINET_FIRST_Y, 0.0), D.CABINET_COUNT)
-    out["diag_bench"] = build_diag_bench(parent, mats, D.DIAG_BENCH_POS)
+    build_carpet(parent, mats)
+    out["console"] = build_console(parent, mats, D.CONSOLE_POS, D.CONSOLE_FACING)
+    if with_video_wall:
+        out["video_wall"] = build_video_wall(parent, mats, D.ROOM_X[1], D.VIDEO_WALL_CENTER_Y, D.VIDEO_WALL_CENTER_Z)
+    cx, cy = D.CABINET_ROW
+    out["cabinets"] = build_cabinets(parent, mats, (cx, cy, 0.0), D.CABINET_COUNT, facing=math.pi)
+    out["wall_display"] = build_wall_display(parent, mats)
+    if with_lab:
+        out["diag_bench"] = build_diag_bench(parent, mats, D.DIAG_BENCH_POS, wall_dist=D.LAB[3] - D.DIAG_BENCH_POS[1])
     return out
 
 
 def build_standalone_scene(mats):
-    """Floor slab, east and south walls only, so control_room.glb is self-contained."""
+    """The operator area on its own: floor, the west and north walls, console, cabinets and wall
+    display, so control_room.glb is self-contained."""
     root = empty("ControlRoom")
-    x0, x1 = D.CONSOLE_POS[0] - 3.0, D.ROOM_X[1]
-    y0, y1 = D.ROOM_Y[0], 6.0
+    x0, x1 = D.ROOM_X[0], -1.0
+    y0, y1 = -1.6, D.ROOM_Y[1]
     floor = MeshBuilder().box_minmax((x0, y0, -0.05), (x1, y1, 0.0))
     floor.build("Floor", mats["floor"], root)
-    wall = MeshBuilder().box_minmax((x1, y0, 0.0), (x1 + D.WALL_T, y1, 4.5))
-    wall.box_minmax((x0, y0 - D.WALL_T, 0.0), (x1, y0, 4.5))
+    wall = MeshBuilder().box_minmax((x0 - D.WALL_T, y0, 0.0), (x0, y1 + D.WALL_T, 4.5))
+    wall.box_minmax((x0, y1, 0.0), (x1, y1 + D.WALL_T, 4.5))
     wall.build("Walls", mats["wall_cream"], root)
-    build_control_room(root, mats)
+    build_control_room(root, mats, with_lab=False, with_video_wall=False)
     return root

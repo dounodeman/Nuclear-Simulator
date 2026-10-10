@@ -53,11 +53,14 @@ print(sim.status()["scram_causes"])      # period and power scrams
 
 You are an operator standing in the PUR-1 reactor hall, modelled on the real room: painted
 block walls, the round black pool wall with the PUR-1 graphic and its yellow safety rim, the
-bridge over the water with its grating, drive cage and tall stainless drive tubes trailing black
-cable bundles, the black exhaust duct over the pool, the purification and cooling loop, the stair
-up to the north platform, the video wall on the east wall, the black digital I&C cabinets with
-their red LED readouts, the desk console with three monitors and blue chairs a few steps from
-the pool, and the diagnostics bench with its green chair. Walk around it in first person
+bridge running northwest to southeast over the water with its grating, drive cage and tall
+stainless drive tubes trailing black cable bundles up to the cable gantry, the purification and
+cooling skid in the southwest corner, the stair along the north wall up to the northeast
+platform, the video wall on the east wall, and the adjoining lab with the diagnostics bench and
+its green chair. The room follows the PUR-1 layout map: the desk console with three monitors
+and blue chairs stands northwest of the pool with the operator facing north, the black digital
+I&C cabinets with their red LED readouts are on the operator's left along the west wall, and the
+video wall is on the right. Walk around it in first person
 (WASD, Shift to run, mouse to look), climb the stair for a view down into the pool, and operate
 the reactor from the console:
 
@@ -73,8 +76,8 @@ navy title bars, etched group boxes and white value fields.
   positions, power, period, pool and protection status.
 - **Hard-wired controls** on the console: hold a rod drive's UP or DOWN button to move it,
   the red manual scram button, the magnet power switch (scram) and the master key switch
-  (scram reset), plus NS buttons for the startup source. The hallway scram button by the
-  south door works too.
+  (scram reset), plus NS buttons for the startup source. The hallway scram button inside the
+  main door on the east wall works too.
 
 ![The hard-wired panel on the console](docs/img/console_panel.png)
 

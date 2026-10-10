@@ -17,7 +17,7 @@ const STEP_DOWN = 0.5;     // largest drop the walker takes; anything deeper is 
 const WALK = 1.5, RUN = 3.2;  // m/s
 const REACH = 2.3;         // how far away a control can be used, m
 const SHIELD_CLEAR = 2.0 + RADIUS;   // the black pool wall (radius 2 m) keeps walkers out of this radius
-const SPAWN = { x: 6.0, z: 5.0, yaw: Math.atan2(6.0, 5.0), pitch: -0.08 };  // inside the main door, facing the pool
+const SPAWN = { x: 3.6, z: 4.15, yaw: Math.atan2(3.6, 4.15), pitch: -0.08 };  // inside the main door (east wall), facing the pool
 
 // What each named object on the console does.
 const ROD_BUTTON = /^ui_Rod_(SS1|SS2|RR|NS|FC)_(Up|Down)$/;
@@ -67,19 +67,30 @@ const LABELS = {
   Drive_RR: ["info", null, "RR drive: stepper motor, magnet and drive tube"],
   Drive_NS: ["info", null, "Neutron source drive"],
   Drive_FC: ["info", null, "Fission chamber drive"],
-  PoolExhaust_Duct: ["info", null, "Pool-top exhaust duct"],
-  Door_Main_South: ["info", null, "Main door to the corridor"],
-  Door_West: ["info", null, "West door"],
-  Door_North: ["info", null, "North door"],
-  Door_StorageRoom_North: ["info", null, "Storage room"],
+  CableGantry: ["info", null, "Cable gantry: drive cables from the bridge to the I&C cabinets"],
+  CableGantry_Post: ["info", null, "Cable gantry: drive cables from the bridge to the I&C cabinets"],
+  CoreCamera: ["info", null, "Underwater camera on the core (shown on the video wall)"],
+  ui_WallDisplay_Console: ["info", null, "Wall display: core camera"],
+  WallDisplay_Console_Bezel: ["info", null, "Wall display: core camera"],
+  Door_Main_East: ["info", null, "Main door to the corridor (the hallway scram button is beside it)"],
+  Door_StorageRoom_West: ["info", null, "Storage room"],
+  Door_Platform_North: ["info", null, "Upper-level door from the platform"],
+  LabTable_1_Top: ["info", null, "Adjacent lab: lab table"],
+  LabTable_2_Top: ["info", null, "Adjacent lab: lab table"],
 };
 // The parts of each keyboard, mouse and trackball work like the device itself.
 for (const [part, of] of [["Keyboard_Keys", "Keyboard"], ["Trackball_Ball", "Trackball"],
   ["Trackball_Buttons", "Trackball"], ["Keyboard_2_Keys", "Keyboard_2"], ["Mouse_Pad", "Mouse"],
   ["Mouse_ButtonSplit", "Mouse"], ["Keyboard_3_Keys", "Keyboard_3"]]) LABELS[part] = LABELS[of];
+// The cabinet fronts (glass door, frame, modules, readouts) name the cabinet behind them.
+for (const [k, label] of Object.entries(LABELS)) {
+  const m = /^(Cabinet_\d)_/.exec(k);
+  if (m) for (const part of ["GlassDoor", "DoorFrame", "Modules", "LEDs"]) LABELS[`${m[1]}_${part}`] = label;
+}
 // Thin overhead and wall-mounted detail that should not stop the walker.
 const NO_COLLIDE = ["Ceiling", "HVAC_Ducts", "LightFixtures", "Conduit", "MonorailHoist", "Cabinet_CableTray",
-  "PipeBrackets", "ProcessPiping_Hangers", "PoolExhaust_Duct", "DriveCables", "DriveCable_Yellow",
+  "PipeBrackets", "ProcessPiping_Hangers", "DriveCables", "DriveCable_Yellow", "Soffit_North", "ExitSigns",
+  "CableGantry", "CoreCamera_Pole", "ProcessPiping", "ProcessPiping_Flanges",
   "Mouse_Cable", "DiagBench_Mouse_Cable"];
 
 const ANNUNCIATOR_KEYS = ["scram", "setback", "interlock", "period", "power", "chan",
@@ -105,6 +116,13 @@ function hallEnvironment(renderer) {
   return tex;
 }
 
+function screenRight(mesh) {
+  // Screens are modelled facing their local -X. The viewer looks along +X (local), so their
+  // right is forward x up in world space.
+  const n = new THREE.Vector3(-1, 0, 0).transformDirection(mesh.matrixWorld);
+  return n.clone().negate().cross(new THREE.Vector3(0, 1, 0)).normalize();
+}
+
 export class HallWorld {
   constructor(el, hooks) {
     this.el = el;
@@ -127,7 +145,8 @@ export class HallWorld {
     const sun = new THREE.DirectionalLight(0xffffff, 0.9);
     sun.position.set(2, 6.5, 1);
     this.scene.add(sun);
-    for (const [x, z] of [[-2.5, -3.5], [-2.5, 3.5], [2.5, -3.5], [2.5, 3.5], [7, -3.5], [7, 3.5]]) {
+    // Under the fixture rows (hall x east, z south = -north).
+    for (const [x, z] of [[-5.5, 3.4], [-5.5, -2.6], [-2.5, 0], [0.5, 3.4], [0.5, -2.6], [3.2, 0]]) {
       const l = new THREE.PointLight(0xfff6e8, 6, 12, 1.6);
       l.position.set(x, 6.3, z);
       this.scene.add(l);
@@ -135,6 +154,9 @@ export class HallWorld {
     this.glowLight = new THREE.PointLight(0x4fc3f7, 0, 6, 1.5);
     this.glowLight.position.set(0, -3.9, 0);
     this.scene.add(this.glowLight);
+    const lab = new THREE.PointLight(0xfff6e8, 3, 7, 1.6);   // the adjacent lab through the north opening
+    lab.position.set(-1.1, 2.8, -6.0);
+    this.scene.add(lab);
     this.poolLamp = new THREE.PointLight(0xe6f6ff, 0, 5, 1.2);  // lit only for the core camera
     this.poolLamp.position.set(0.7, -2.0, -0.6);
     this.scene.add(this.poolLamp);
@@ -222,13 +244,14 @@ export class HallWorld {
       ? this._screen(t.name, 512, 288, t) : null));
     if (tiles.length === 12) {
       const coreCam = new THREE.PerspectiveCamera(60, 1, 0.05, 8);
-      coreCam.position.set(0.9, -2.55, 0.35);   // off to the side of the core, looking down at it
+      coreCam.position.set(0.6, -2.5, 0.6);     // just under the camera head hung from the bridge, SE of the core
       coreCam.lookAt(0, -3.9, 0);
       this.coreFeed = this._feed(tiles.filter((_, i) => i % 4 === 1 || i % 4 === 2), coreCam, 1024, 864, true);
-      const hallCam = new THREE.PerspectiveCamera(66, 1, 0.1, 40);   // high in the south-east corner
-      hallCam.position.set(8.3, 5.0, 5.3);
-      hallCam.lookAt(0, 0.6, -0.6);
+      const hallCam = new THREE.PerspectiveCamera(70, 1, 0.1, 40);   // high in the south-east corner
+      hallCam.position.set(4.0, 5.0, 4.6);
+      hallCam.lookAt(-2.5, 0.6, -1.5);
       this.hallFeed = this._feed([tiles[7]], hallCam, 512, 288, false);
+      this._mirror("ui_WallDisplay_Console", this.coreFeed);   // the wall display over the console
     }
     // Underwater look for the core camera: blue haze and a lamp in the pool, used only while
     // that view renders (intensity, not visibility, so the shaders keep the same light count).
@@ -278,7 +301,32 @@ export class HallWorld {
     osd.rotation.y = -Math.PI / 2;
     osd.position.set(xf - 0.004, (y0 + y1) / 2, (z0 + z1) / 2);
     this.scene.add(osd);
-    return { rt, cam, meshes, osd, under, sc: { cv, ctx: cv.getContext("2d"), tex }, last: 0 };
+    return { rt, cam, meshes, osd, under, mat, aspect: cam.aspect, sc: { cv, ctx: cv.getContext("2d"), tex }, last: 0 };
+  }
+
+  _mirror(name, feed) {
+    // Show a camera feed on another screen too, cropped to that screen's shape.
+    const o = this.root.getObjectByName(name);
+    const m = o && (o.isMesh ? o : o.getObjectByProperty("isMesh", true));
+    if (!m || !feed) return;
+    const right = screenRight(m);
+    const g = m.geometry.clone();
+    const p = g.attributes.position, v = new THREE.Vector3();
+    const pts = [];
+    for (let i = 0; i < p.count; i++) pts.push(v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld).clone());
+    const us = pts.map((q) => q.dot(right)), ys = pts.map((q) => q.y);
+    const u0 = Math.min(...us), u1 = Math.max(...us), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const k = Math.min(1, feed.aspect / ((u1 - u0) / (y1 - y0)));   // fraction of the picture's height shown
+    const uv = new Float32Array(p.count * 2);
+    pts.forEach((q, i) => {
+      uv[2 * i] = (us[i] - u0) / (u1 - u0);
+      uv[2 * i + 1] = 0.5 + ((q.y - y0) / (y1 - y0) - 0.5) * k;
+    });
+    g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    m.geometry = g;
+    m.material = feed.mat;
+    m.userData.baseEmissive = null;
+    feed.meshes.push(m);
   }
 
   _renderFeeds() {
@@ -322,17 +370,18 @@ export class HallWorld {
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
-    // The screens face west (-x); give them UVs from world z (left to right) and y (up).
+    // Give the screen UVs across its face as the viewer sees it: u to the viewer's right, v up.
     const g = mesh.geometry.clone();
     const p = g.attributes.position;
+    const right = screenRight(mesh);
     const v = new THREE.Vector3();
     const pts = [];
     for (let i = 0; i < p.count; i++) pts.push(v.fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld).clone());
-    const zs = pts.map((q) => q.z), ys = pts.map((q) => q.y);
-    const z0 = Math.min(...zs), z1 = Math.max(...zs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const us = pts.map((q) => q.dot(right)), ys = pts.map((q) => q.y);
+    const u0 = Math.min(...us), u1 = Math.max(...us), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const uv = new Float32Array(p.count * 2);
     pts.forEach((q, i) => {
-      uv[2 * i] = (q.z - z0) / (z1 - z0 || 1);
+      uv[2 * i] = (us[i] - u0) / (u1 - u0 || 1);
       uv[2 * i + 1] = (q.y - y0) / (y1 - y0 || 1);
     });
     g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));

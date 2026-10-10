@@ -37,11 +37,11 @@ def build_reactor_hall(do_render: bool, quality: int):
     build_reactor_hall(mats)
     export_glb(os.path.join(EXPORT, "reactor_hall.glb"))
     if do_render:
-        cam = add_camera("Cam_Overview", (-4.4, -5.4, 5.2), (2.5, 0.5, 0.8), lens=22)
+        cam = add_camera("Cam_Overview", (3.9, -4.6, 5.2), (-2.6, 1.2, 0.8), lens=22)
         render(os.path.join(RENDERS, "reactor_hall_overview.png"), cam, samples=quality)
         cam = add_camera("Cam_PoolTop", (0.6, -2.6, 5.0), (0.0, 0.2, -3.5), lens=24)
         render(os.path.join(RENDERS, "reactor_hall_pool_top.png"), cam, samples=quality)
-        cam = add_camera("Cam_Console", (2.6, -3.2, 2.1), (6.8, 0.3, 1.5), lens=24)
+        cam = add_camera("Cam_Console", (-1.4, -0.6, 2.1), (-4.6, 3.6, 1.3), lens=24)
         render(os.path.join(RENDERS, "reactor_hall_console.png"), cam, samples=quality)
 
 
@@ -52,14 +52,15 @@ def build_control_room(do_render: bool, quality: int):
     build_standalone_scene(mats)
     export_glb(os.path.join(EXPORT, "control_room.glb"))
     if do_render:
-        add_light("Key", "AREA", (4.5, -2.0, 3.8), 1500, size=3.0, rotation=(0.6, 0.0, 0.0))
-        add_light("Fill", "POINT", (6.5, 2.5, 3.5), 800)
         cx, cy, cz = D.CONSOLE_POS
-        cam = add_camera("Cam_Console", (cx - 3.0, cy - 2.6, 2.1), (cx + 1.2, cy + 0.3, 1.4), lens=24)
+        add_light("Key", "AREA", (cx + 1.0, cy - 3.0, 3.8), 1500, size=3.0, rotation=(0.6, 0.0, 0.0))
+        add_light("Fill", "POINT", (cx - 1.5, cy - 1.5, 3.5), 800)
+        # The operator sits south of the console and faces north (+Y).
+        cam = add_camera("Cam_Console", (cx + 2.6, cy - 3.0, 2.1), (cx - 0.3, cy + 1.2, 1.4), lens=24)
         render(os.path.join(RENDERS, "control_room_console.png"), cam, samples=quality)
-        cam = add_camera("Cam_Operator", (cx - 1.1, cy - 0.3, 1.45), (cx + 2.4, cy, 1.9), lens=20)
+        cam = add_camera("Cam_Operator", (cx + 0.3, cy - 1.1, 1.45), (cx, cy + 2.4, 1.9), lens=20)
         render(os.path.join(RENDERS, "control_room_operator_view.png"), cam, samples=quality)
-        cam = add_camera("Cam_Turret", (cx - 1.0, cy - 0.5, 1.45), (cx + 0.3, cy - 0.3, 0.95), lens=35)
+        cam = add_camera("Cam_Turret", (cx + 0.5, cy - 1.0, 1.45), (cx + 0.3, cy + 0.3, 0.95), lens=35)
         render(os.path.join(RENDERS, "control_room_controls.png"), cam, samples=quality)
 
 
