@@ -7,8 +7,8 @@ files are the assets the future control-room interface will load.
 
 | File | What it is |
 | --- | --- |
-| `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, console, video wall, I&C cabinets and diagnostics bench |
-| `export/control_room.glb` | The operator area alone (desk console with three monitors, hard-wired panel, blue chairs, carpet mat, 4 x 3 video wall, four I&C cabinets, diagnostics bench) on a floor slab with the east and south walls |
+| `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, cable gantry, console, video wall, I&C cabinets, and the adjoining lab with the diagnostics bench |
+| `export/control_room.glb` | The operator area alone (desk console with three monitors, hard-wired panel, blue chairs, carpet mat, four I&C cabinets, the wall display over them) on a floor slab with the west and north walls |
 | `export/pur1_core.glb` | The core alone: grid plate, 13 standard + 3 control assemblies with plates, 20 graphite reflectors, irradiation tubes, control blades, ion chambers, fission chamber, source, drop tubes |
 | `renders/*.png` | Preview renders of each model |
 
@@ -42,7 +42,9 @@ brushed stainless and aluminium, acoustic ceiling tiles and so on, chosen by mat
 projected in world metres. Keep the material names in `palette()` when renaming.
 
 Frame: pool centre at x = y = 0, reactor-room floor at z = 0, +X east (toward
-the console and video wall), +Y north, metres. The glTF exporter rotates to Y up.
+the video wall and main door), +Y north, metres. The lattice rows on the core map are
+counted from the north and the columns from the west, so SS1 at 4-4 is the southeast
+control assembly. The glTF exporter rotates to Y up.
 
 ## Hooks for the interface
 
@@ -77,8 +79,14 @@ two workstation displays; console, hallway, key-switch and magnet-supply scrams.
 Assumed, pending drawings or photos (see `pur1/dims.py`): room size and height,
 shield thickness and outer radius, lattice pitch, positions of SS2 and RR, which
 side carries the irradiation tubes, bridge and drive-housing geometry, console
-size and layout, cabinet count, placement of everything in the room, the hoist, the
-stair and platform, and the door locations. The four reference photos in the Drive
+size and layout, cabinet count, the hoist, and the exact positions in the room. The room
+plan follows the PUR-1 layout map in the project files (`maps/pur1_layout_map.png`): the
+console northwest of the pool with the operator facing north, the I&C cabinets along the
+west wall on the operator's left, the video wall on the east wall, the stair along the north
+wall to the northeast platform, the main door on the east wall, the storage-room door on the
+west wall, the bridge running northwest to southeast with the cable gantry at its northwest
+end, and the diagnostics bench in the adjoining lab through the north wall opening. The
+purification skid in the southwest corner is assumed. The four reference photos in the Drive
 "PUR-1 Reference Images" folder fix the look of the pool wall, console, cabinets,
 video wall, stair, walls, floor striping and diagnostics bench; the dimensions read
 off them are still marked ASSUMED. The building level (ground

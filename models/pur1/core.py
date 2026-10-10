@@ -11,9 +11,16 @@ from .common import MeshBuilder, box, cylinder, empty
 
 
 def lattice_xy(row: int, col: int, origin=(0.0, 0.0)):
-    """Centre of a 6x6 lattice position (1-based, row = +Y north, col = +X east)."""
+    """Centre of a 6x6 lattice position (1-based; rows counted from the north, as on the SAR core
+    map; columns from the west)."""
     off = (D.GRID_N - 1) / 2
-    return (origin[0] + (col - 1 - off) * D.GRID_PITCH, origin[1] + (row - 1 - off) * D.GRID_PITCH)
+    return (origin[0] + (col - 1 - off) * D.GRID_PITCH, origin[1] + (off - (row - 1)) * D.GRID_PITCH)
+
+
+def control_xy(rod: str):
+    """Centre of a control assembly from its 4 x 4 core position (D.CONTROL_POSITIONS)."""
+    r, c = D.CONTROL_POSITIONS[rod]
+    return lattice_xy(r + 1, c + 1)
 
 
 def core_positions():
@@ -93,7 +100,7 @@ def build_core(parent, mats, origin=(0.0, 0.0, 0.0)):
         out[nm] = mb.build(nm, mats["aluminum_dark"], core)
 
     # Movable fission chamber (startup channel) in a guide tube attached to the NE fuel element.
-    fx, fy = lattice_xy(5, 5)
+    fx, fy = lattice_xy(2, 5)
     fx += D.ELEMENT_W / 2 + 0.03
     mb = MeshBuilder().tube((fx, fy, plate_z0), 0.022, 0.019, D.WATER_SURFACE_Z - oz + 0.3 - plate_z0, 16)
     out["fc_guide"] = mb.build("FissionChamberGuideTube", mats["aluminum"], core)
@@ -101,7 +108,7 @@ def build_core(parent, mats, origin=(0.0, 0.0, 0.0)):
     out["fission_chamber"] = fc
 
     # Pu-Be startup source in a 6061 Al container outside the core (SW corner), on its own drive.
-    sx, sy = lattice_xy(1, 1)
+    sx, sy = lattice_xy(6, 1)
     sx -= D.ELEMENT_W / 2 + 0.05
     sy -= D.ELEMENT_W / 2 + 0.05
     mb = MeshBuilder().tube((sx, sy, plate_z0), 0.03, 0.027, D.WATER_SURFACE_Z - oz + 0.3 - plate_z0, 16)
@@ -109,7 +116,7 @@ def build_core(parent, mats, origin=(0.0, 0.0, 0.0)):
     out["source"] = cylinder("ui_PuBeSource", (sx, sy, plate_z0 + 0.25), 0.022, 0.12, mats["aluminum_dark"], core, 16)
 
     # Drop tubes next to the core: 5/8 in and 1.75 in (Al), 3 in PVC, 5 in stainless.
-    dx, dy = lattice_xy(6, 1)
+    dx, dy = lattice_xy(1, 1)
     dx += D.GRID_PITCH
     drops = [("DropTube_0.625in", 0.625 / 2 * 0.0254, mats["aluminum"], (dx, dy + 0.10)),
              ("DropTube_1.75in", 1.75 / 2 * 0.0254, mats["aluminum"], (dx, dy + 0.20)),
