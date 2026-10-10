@@ -9,7 +9,7 @@
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
 </head>
-<body>
+<body class="main-menu">
 <!-- The reactor hall, walked in first person -->
 <div id="world" class="world"></div>
 
@@ -26,11 +26,14 @@
   <div class="hud-help" id="hudHelp">WASD walk · Shift run · mouse look · click or E to use · Esc menu</div>
 </div>
 
-<!-- Menu: shown at start and on Esc. A plain window in the same look as the plant HMI. -->
+<!-- Menu: the main menu at start (over an animated gauge panel) and the pause menu on Esc.
+     A plain window in the same look as the plant HMI. -->
 <div class="menu" id="menu">
+  <canvas id="menuBg" class="menu-bg" aria-hidden="true"></canvas>
   <div class="menu-card win" role="dialog" aria-labelledby="menuTitle">
-    <div class="win-title"><span id="menuTitle">PUR-1 Simulator - Menu</span></div>
+    <div class="win-title"><span id="menuTitle">PUR-1 Simulator - Main Menu</span></div>
     <div class="win-body menu-body">
+      <div class="menu-head"><span class="menu-mark">PUR-1</span><span>Purdue University Reactor Number One</span></div>
       <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
       <fieldset class="group">
         <legend>Simulation speed</legend>
