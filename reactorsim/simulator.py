@@ -395,6 +395,25 @@ class Simulator:
             else:
                 self._release_rods()
 
+    def drop_rod(self, rod: str) -> None:
+        """Rod-drop test: cut one rod's magnet current so that rod falls alone while the others
+        stay latched. ``relatch_rod`` restores the magnet so the drive can pick the rod up again."""
+        r = self.rods[rod]
+        if not r.spec.scrammable:
+            raise ValueError(f"{rod} has no magnet and cannot be dropped")
+        r.target = None
+        r.command = 0
+        r.release()
+        self._event("operator", f"{rod} magnet de-energized (rod drop)")
+
+    def relatch_rod(self, rod: str) -> None:
+        """Re-energize a dropped rod's magnet and run its drive down to pick the rod up."""
+        r = self.rods[rod]
+        if self.scrammed:
+            return
+        r.magnet_power = True
+        self.drive_to(rod, 0.0)
+
     def reset_scram(self) -> bool:
         """Clear a scram if no trip condition remains. Drives must then be run in to re-latch."""
         if self.last_protection.scram_causes:

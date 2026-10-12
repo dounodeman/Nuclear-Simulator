@@ -33,7 +33,8 @@ Simulator Parameter Sheet (SAR 2008/2015, Technical Specifications, digital twin
 pip install -e .[dev]
 python -m reactorsim list
 python -m reactorsim run startup --plot startup.png
-python -m pytest            # 32 validation tests
+python -m reactorsim experiments
+python -m pytest            # validation tests
 ```
 
 ```python
@@ -46,6 +47,37 @@ sim.insert_reactivity(0.003)             # an experiment at the tech-spec limit
 sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
 ```
+
+## Reactor physics experiments
+
+The classic research-reactor lab measurements, run on the simulated PUR-1 the way a student
+crew would run them at the console. Each one uses only what the instruments show (count rates,
+log and linear power, rod positions, pool temperature, all with their noise) and reports the
+measured value next to the value built into the model, so the technique itself can be judged.
+
+| Experiment | Method | Typical result (seed 1) |
+| --- | --- | --- |
+| `approach_to_critical` | 1/M plot with the source in, shims withdrawn as a bank, each step at most halfway to the prediction | Critical bank 55.98 cm against 56.11 cm |
+| `rod_calibration` | Positive period: step the regulating rod, fit the stable period, inhour equation, return to power with a shim | RR worth $0.347 against $0.344 (+0.6%) |
+| `rod_drop` | Drop SS2 alone; inverse kinetics, integral count and prompt jump; rod-bottom time | $2.735 by inverse kinetics; integral count 5% low, prompt jump 29% high; drop 0.56 s |
+| `sample_worth` | Servo holds 1 W while an absorber sample goes in; worth from the RR curve | -$0.0998 against -$0.100 |
+| `temperature_coefficient` | Servo finds the critical RR position at four pool temperatures | -1.256 cents/C against -1.257 |
+| `power_calibration` | Pool heat-up rate with the chiller off, less the shut-down drift, times the pool's heat capacity | 9.90 kW against 9.91 kW thermal; catches miscalibrated channels |
+
+```bash
+python -m reactorsim experiment rod_calibration --plot rr.png --json rr.json
+python -m reactorsim experiment power_calibration --no-noise
+```
+
+```python
+from reactorsim.experiments import EXPERIMENTS
+
+sim, cal = EXPERIMENTS["rod_calibration"].run()
+sim, s = EXPERIMENTS["sample_worth"].run(sample_dollars=-0.2, calibration=cal["integral_curve"])
+```
+
+The analysis tools (`fit_period`, `inhour_reactivity`, `inverse_kinetics`) are in
+`reactorsim/experiments.py` for building new experiments.
 
 ## Control room (Mac app)
 
@@ -174,6 +206,7 @@ reactorsim/
   reactors/    one module per reactor design (pur1.py)
   simulator.py the control loop and operator actions
   scenarios.py scripted operations and accidents
+  experiments.py reactor physics lab experiments and their analysis tools
   app/         control room: live session, local server, web page, updater
 packaging/     Mac app build (PyInstaller)
 tests/         validation tests
