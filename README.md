@@ -136,10 +136,32 @@ navy title bars, etched group boxes and white value fields.
   positions, power, period, pool and protection status.
 - **Hard-wired controls** on the console: hold a rod drive's UP or DOWN button to move it,
   the red manual scram button, the magnet power switch (scram) and the master key switch
-  (scram reset), plus NS buttons for the startup source. The hallway scram button inside the
-  main door on the east wall works too.
+  (scram reset), plus NS buttons for the startup source. The hallway scram button in the
+  corridor just outside the main door works too.
 
 ![The hard-wired panel on the console](docs/img/console_panel.png)
+
+### The basement
+
+The main door stands open onto the basement corridor, laid out from the PUR-1 basement floor
+plan, and the rooms off it can be walked into:
+
+| Room | What is in it |
+| --- | --- |
+| B70B, expanding lab space | Open floor east of the reactor room: the first two benches, an empty equipment rack, crated equipment and taped outlines for the next benches |
+| B86, undergraduate thermal-hydraulics lab | A natural-circulation water loop on a strut frame (heated glass test section, cooler, expansion tank), reservoir, pump, heater supply and student DAQ benches |
+| B85, beta-voltaic facility | Glovebox, light-tight probe station with source-measure units, lead source safe |
+| B77, chemistry facility room | Two fume hoods, an epoxy-top island bench with reagent shelf and sink, flammables cabinet, safety shower |
+| B84, subcritical pile | The graphite pile (172.7 x 172.7 x 203.2 cm) with its fuel channels and testbed, the Pu-Be source cask, a BF3 counter and the counting bench |
+
+Each room has its number plate by the door, and pointing at the equipment names it. B76, B87
+and the south stair have closed doors. The reactor room keeps the size it was given from the
+photos (11.6 m by 9.2 m); the plan draws it about 8.0 m by 11.6 m, so the other rooms are placed
+from the main door at the plan's scale.
+
+![The basement corridor from the main door](docs/img/basement_corridor.png)
+
+![The basement in the model](docs/img/basement_map.png)
 
 The monitors in the hall are copies of the two workstation screens, so whatever is entered at a
 workstation (rod set points, the servo set point, the linear range, the source, the trend window)

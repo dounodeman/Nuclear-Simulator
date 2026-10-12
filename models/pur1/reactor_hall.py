@@ -21,6 +21,7 @@ from .common import MeshBuilder, box, curved_text, text_width, cylinder, empty, 
 from . import props
 from .control_room import build_control_room
 from .core import build_core, control_xy, lattice_xy
+from .basement import build_basement
 
 
 def build_room(parent, mats):
@@ -58,7 +59,10 @@ def build_room(parent, mats):
     ox0, ox1 = D.LAB_OPENING_X
     walls = MeshBuilder()
     walls.box_minmax((x0 - t, y0 - t, 0), (x0, y1 + t, h))      # west
-    walls.box_minmax((x1, y0 - t, 0), (x1 + t, y1 + t, h))      # east
+    md0, md1 = D.MAIN_DOOR_Y - D.MAIN_DOOR_W / 2, D.MAIN_DOOR_Y + D.MAIN_DOOR_W / 2
+    walls.box_minmax((x1, y0 - t, 0), (x1 + t, md0, h))         # east, south of the main door
+    walls.box_minmax((x1, md1, 0), (x1 + t, y1 + t, h))         # east, north of the main door
+    walls.box_minmax((x1, md0, D.DOOR_H + 0.06), (x1 + t, md1, h))   # over the main door
     walls.box_minmax((x0, y0 - t, 0), (x1, y0, h))              # south
     walls.box_minmax((x0, y1, 0), (ox0, y1 + t, h))             # north, west of the opening
     walls.box_minmax((ox1, y1, 0), (x1, y1 + t, h))             # north, east of the opening
@@ -82,8 +86,9 @@ def build_room(parent, mats):
     jf.box(((ox0 + ox1) / 2, y1 - 0.02, 2.4), (ox1 - ox0 + 0.08, 0.06, 0.08))
     jf.build("LabOpening_Frame", mats["door_frame"], root, bevel=0.004)
 
-    # Doors: main personnel door on the east wall (SE corner), storage-room door on the west wall,
-    # and the platform-level door in the NE corner at the top of the stair.
+    # Doors: the main pair on the east wall, standing open to the basement corridor (basement.py),
+    # the storage-room door on the west wall, and the platform-level door in the NE corner at the
+    # top of the stair.
     top = D.STAIR_STEPS * D.STAIR_RISE
     doors = {
         "Door_Main_East": ((x1, D.MAIN_DOOR_Y, 0), math.pi / 2),
@@ -91,16 +96,19 @@ def build_room(parent, mats):
         "Door_Platform_North": ((3.75, y1, top), math.pi),
     }
     for nm, (pos, facing) in doors.items():
-        props.door(root, mats, nm, pos, facing, D.DOOR_W if "Platform" not in nm else 0.75, D.DOOR_H, t)
+        if nm == "Door_Main_East":
+            props.door(root, mats, nm, pos, facing, D.MAIN_DOOR_W, D.DOOR_H, t, leaves=2, open_deg=90)
+        else:
+            props.door(root, mats, nm, pos, facing, D.DOOR_W if "Platform" not in nm else 0.75, D.DOOR_H, t)
     # Illuminated EXIT signs over the main door and the platform door.
     ex = MeshBuilder().box((x1 - 0.06, D.MAIN_DOOR_Y, 2.45), (0.10, 0.34, 0.16))
     ex.box((3.75, y1 - 0.06, top + 2.45), (0.34, 0.10, 0.16))
     ex.build("ExitSigns", mats["led_green"], root)
-    # The hallway scram button is outside the main door in the plant; here it sits on the wall
-    # just inside the door so it can be reached.
-    hb = cylinder("ui_Scram_Hallway", (x1 - 0.04, D.MAIN_DOOR_Y + 0.85, 1.3), 0.035, 0.04, mats["button_red"], root, 16, axis="x")
+    # The hallway scram button: in the corridor outside the main door, south of it.
+    xo, ys = x1 + t, y0 - 0.75
+    hb = cylinder("ui_Scram_Hallway", (xo, ys, 1.3), 0.035, 0.04, mats["button_red"], root, 16, axis="x")
     hb["role"] = "manual_scram_hallway"
-    MeshBuilder().box((x1 - 0.015, D.MAIN_DOOR_Y + 0.85, 1.3), (0.03, 0.14, 0.14)).build("Scram_Hallway_Box", mats["sign_yellow"], root)
+    MeshBuilder().box((xo + 0.015, ys, 1.3), (0.03, 0.14, 0.14)).build("Scram_Hallway_Box", mats["sign_yellow"], root)
 
     # Exposed services (photos): conduit along the west and north walls, panel boards and an
     # emergency light on the west wall, grey enclosures and a fire extinguisher on the north wall,
@@ -570,6 +578,7 @@ def build_reactor_hall(mats, with_console=True):
     build_bridge_and_drives(root, mats, core_objs)
     build_process_loop(root, mats)
     build_lab(root, mats)
+    build_basement(root, mats)
     if with_console:
         build_control_room(root, mats)
     # Cherenkov light for renders (not exported).

@@ -1,7 +1,8 @@
 // The reactor hall as a place to walk around in first person.
 //
 // Loads models/export/reactor_hall.glb (Y up, metres, pool centre at the origin, floor at y = 0,
-// console and video wall to the east, +x). The operator walks with WASD and looks with the mouse.
+// console and video wall to the east, +x; the main door opens onto the basement corridor and the
+// labs off it, models/pur1/basement.py). The operator walks with WASD and looks with the mouse.
 // Every control is on the desk console: the left and right monitors open the reactor-control and
 // plant-data computers, the centre monitor mirrors the RTP operator display, and the hard-wired
 // buttons (rod drives, scram, magnet power, key switch) act directly. Screens, rod readouts,
@@ -77,6 +78,59 @@ const LABELS = {
   Door_Platform_North: ["info", null, "Upper-level door from the platform"],
   LabTable_1_Top: ["station", "lab", "Materials lab: sample irradiation and gamma spectrometry"],
   LabTable_2_Top: ["station", "lab", "Materials lab: sample irradiation and gamma spectrometry"],
+  // The basement off the corridor (models/pur1/basement.py, from the floor plan).
+  Sign_B70A: ["info", null, "B70A: PUR-1 reactor room"],
+  Posting_B70A: ["info", null, "Caution: radiation area (PUR-1 reactor room)"],
+  Door_B70B: ["info", null, "B70B: expanding lab space"],
+  Sign_B70B: ["info", null, "B70B: expanding lab space"],
+  B70B_Rack: ["info", null, "Empty equipment rack, waiting for the new lab's instruments"],
+  B70B_Crates: ["info", null, "New equipment, still crated"],
+  B70B_Crate_Wood: ["info", null, "New equipment, still crated"],
+  B70B_FloorTape: ["info", null, "Taped outlines where the next lab benches will go"],
+  B70B_Whiteboard: ["info", null, "Whiteboard: layout ideas for the new lab space"],
+  Door_B86: ["info", null, "B86: undergraduate thermal-hydraulics lab"],
+  Sign_B86: ["info", null, "B86: undergraduate thermal-hydraulics lab"],
+  TH_TestSection: ["info", null, "Heated glass test section: watch subcooled and nucleate boiling on the heater rod"],
+  TH_HeaterRod: ["info", null, "Electric heater rod standing in for a fuel pin"],
+  TH_Piping: ["info", null, "Natural-circulation loop: hot leg up from the heater, cold leg down from the cooler"],
+  TH_Cooler: ["info", null, "Loop cooler: the heat sink that drives natural circulation"],
+  TH_ExpansionTank: ["info", null, "Expansion tank: room for the water to swell as the loop heats"],
+  TH_Flowmeter: ["info", null, "Loop flowmeter"],
+  TH_Reservoir: ["info", null, "Water reservoir for filling the loop"],
+  TH_Pump: ["info", null, "Fill and forced-flow pump"],
+  TH_PowerSupply: ["info", null, "Heater DC power supply"],
+  TH_Frame: ["info", null, "Natural-circulation loop on its strut frame"],
+  Door_B85: ["info", null, "B85: beta-voltaic facility"],
+  Sign_B85: ["info", null, "B85: beta-voltaic facility"],
+  Glovebox: ["info", null, "Glovebox for handling the beta sources"],
+  Glovebox_Window: ["info", null, "Glovebox for handling the beta sources"],
+  Glovebox_Antechamber: ["info", null, "Glovebox antechamber: pass items in and out"],
+  ProbeStation: ["info", null, "Light-tight probe station for measuring beta-voltaic cells"],
+  SourceMeasureUnits: ["info", null, "Source-measure units: I-V curves of the cells"],
+  SourceSafe: ["info", null, "Lead-lined source safe"],
+  Door_B77: ["info", null, "B77: chemistry facility room"],
+  Sign_B77: ["info", null, "B77: chemistry facility room"],
+  FumeHood_1: ["info", null, "Fume hood"],
+  FumeHood_2: ["info", null, "Fume hood"],
+  ChemBench: ["info", null, "Chemical-resistant epoxy bench with reagent shelf"],
+  ChemBench_Sink: ["info", null, "Lab sink"],
+  FlammablesCabinet: ["info", null, "Flammable-liquids storage cabinet"],
+  SafetyShower: ["info", null, "Safety shower and eyewash"],
+  Door_B84: ["info", null, "B84: subcritical pile"],
+  Sign_B84: ["info", null, "B84: subcritical pile"],
+  Posting_B84: ["info", null, "Caution: radiation area (subcritical pile)"],
+  SubcriticalPile: ["info", null, "Subcritical pile: graphite stack 172.7 x 172.7 x 203.2 cm, never critical; an external Pu-Be source drives it"],
+  SubcriticalPile_Channels: ["info", null, "Fuel channels in the pile face"],
+  SubcriticalPile_SourcePort: ["info", null, "Source port: the Pu-Be source goes in here"],
+  Pile_Testbed: ["info", null, "Testbed in the pile (about 150 litres) for activation and detector experiments"],
+  PuBe_SourceCask: ["info", null, "Pu-Be neutron source storage cask"],
+  BF3_Detector: ["info", null, "BF3 neutron counter on its stand"],
+  NIM_Bin: ["info", null, "NIM bin: preamp, amplifier, discriminator, scaler and HV for the counter"],
+  Door_B76: ["info", null, "B76 (not modelled)"],
+  Sign_B76: ["info", null, "B76 (not modelled)"],
+  Door_B87: ["info", null, "B87 (not modelled)"],
+  Sign_B87: ["info", null, "B87 (not modelled)"],
+  Door_Stair: ["info", null, "To the south stair and rooms B78 to B83 (not modelled)"],
 };
 // The parts of each keyboard, mouse and trackball work like the device itself.
 for (const [part, of] of [["Keyboard_Keys", "Keyboard"], ["Trackball_Ball", "Trackball"],
@@ -91,7 +145,8 @@ for (const [k, label] of Object.entries(LABELS)) {
 const NO_COLLIDE = ["Ceiling", "HVAC_Ducts", "LightFixtures", "Conduit", "MonorailHoist", "Cabinet_CableTray",
   "PipeBrackets", "ProcessPiping_Hangers", "DriveCables", "DriveCable_Yellow", "Soffit_North", "ExitSigns",
   "CableGantry", "CoreCamera_Pole", "ProcessPiping", "ProcessPiping_Flanges",
-  "Mouse_Cable", "DiagBench_Mouse_Cable"];
+  "Mouse_Cable", "DiagBench_Mouse_Cable", "Basement_Ceiling", "Basement_LightFixtures", "B70B_FloorTape",
+  "TH_Thermocouples", "BF3_Cable", "FumeHood_1_Exhaust", "FumeHood_2_Exhaust"];
 
 const ANNUNCIATOR_KEYS = ["scram", "setback", "interlock", "period", "power", "chan",
   "pooltemp", "poollevel", "rad", "servo", "source", "rps"];
@@ -157,6 +212,12 @@ export class HallWorld {
     const lab = new THREE.PointLight(0xfff6e8, 3, 7, 1.6);   // the adjacent lab through the north opening
     lab.position.set(-1.1, 2.8, -6.0);
     this.scene.add(lab);
+    // The basement off the main door: corridor, B70B, B86 / B85, B84 and B77 (three.js z = -north).
+    for (const [x, z] of [[6.1, 8.5], [6.1, 19.5], [10.5, 0], [11.2, 17.4], [10.5, 26.5], [2.6, 14.4]]) {
+      const l = new THREE.PointLight(0xfff6e8, 2.5, 9, 1.6);
+      l.position.set(x, 2.7, z);
+      this.scene.add(l);
+    }
     this.poolLamp = new THREE.PointLight(0xe6f6ff, 0, 5, 1.2);  // lit only for the core camera
     this.poolLamp.position.set(0.7, -2.0, -0.6);
     this.scene.add(this.poolLamp);

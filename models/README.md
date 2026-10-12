@@ -7,7 +7,7 @@ files are the assets the future control-room interface will load.
 
 | File | What it is |
 | --- | --- |
-| `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, cable gantry, console, video wall, I&C cabinets, and the adjoining lab with the diagnostics bench |
+| `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, cable gantry, console, video wall, I&C cabinets, and the adjoining lab with the diagnostics bench; plus the basement off the main door: the corridor, B70B, B86, B85, B77 and B84 |
 | `export/control_room.glb` | The operator area alone (desk console with three monitors, hard-wired panel, blue chairs, carpet mat, four I&C cabinets, the wall display over them) on a floor slab with the west and north walls |
 | `export/pur1_core.glb` | The core alone: grid plate, 13 standard + 3 control assemblies with plates, 20 graphite reflectors, irradiation tubes, control blades, ion chambers, fission chamber, source, drop tubes |
 | `renders/*.png` | Preview renders of each model |
@@ -34,6 +34,7 @@ on Debian/Ubuntu) and `LIBGL_ALWAYS_SOFTWARE=1` when there is no GPU.
 - `pur1/core.py` the core.
 - `pur1/control_room.py` desk console, video wall, I&C cabinets, diagnostics bench.
 - `pur1/reactor_hall.py` room, pool, shield, bridge and drives, process loop; places the core and the console area.
+- `pur1/basement.py` the corridor south from the main door and the rooms off it (B70B expanding lab space, B86 thermal-hydraulics lab, B85 beta-voltaic facility, B77 chemistry room, B84 subcritical pile), from the basement floor plan.
 - `build.py` entry point, cameras and lights for the previews.
 
 The models carry flat colours only. The app adds surface detail when it loads them
@@ -86,7 +87,19 @@ west wall on the operator's left, the video wall on the east wall, the stair alo
 wall to the northeast platform, the main door on the east wall, the storage-room door on the
 west wall, the bridge running northwest to southeast with the cable gantry at its northwest
 end, and the diagnostics bench in the adjoining lab through the north wall opening. The
-purification skid in the southwest corner is assumed. The four reference photos in the Drive
+purification skid in the southwest corner is assumed.
+
+The basement around the room follows the PUR-1 basement floor plan (20 ft scale bar), read with
+its top as the model's north, which is how the plan's B70A lines up with the photos: the stair
+on the north wall to the NE door, storage room B72 off the west wall and the main door, a pair,
+on the east wall near its south end. The plan's own north arrow points down and to the right;
+the model keeps the photo frame. B70A keeps its photo-based 11.6 m x 9.2 m (the plan draws it
+about 8.0 m x 11.6 m), so the corridor and rooms are placed from the main door at the plan's
+scale; B70B shares B70A's north wall line. The subcritical pile's outer size (172.7 x 172.7 x
+203.2 cm) and testbed volume (about 1.5 x 10^5 cm3) are from Purdue's 2025 Instruments paper on
+the modified pile; its brick courses, channel pattern and the room furnishings are representative.
+The adjoining lab through the north opening is still placed as the photos suggest; the plan has
+no room there, so its true position (possibly B70B itself) is open. The four reference photos in the Drive
 "PUR-1 Reference Images" folder fix the look of the pool wall, console, cabinets,
 video wall, stair, walls, floor striping and diagnostics bench; the dimensions read
 off them are still marked ASSUMED. The building level (ground

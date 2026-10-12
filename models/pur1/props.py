@@ -174,11 +174,13 @@ def pc_tower(parent, mats, name, center, facing=0.0):
 
 
 # ------------------------------------------------------------------------------------------ doors
-def door(parent, mats, name, origin, facing, width, height, wall_t, sign=True):
+def door(parent, mats, name, origin, facing, width, height, wall_t, sign=True, leaves=1, open_deg=0.0):
     """Hollow-metal personnel door in a pressed-steel frame, with a narrow wired-glass vision
     panel, a lever handle, a kick plate, three hinges and an overhead closer. `origin` is the
     door's centre at floor level on the room-side face of the wall; local +Y points into the room,
-    local X runs along the wall. The leaf object is named `name`."""
+    local X runs along the wall. The leaf object is named `name`. `leaves=2` makes a pair of
+    leaves meeting in the middle; `open_deg` swings the leaves into the room (local +Y) about
+    their hinges, so the opening can be walked through."""
     root = _frame(parent, f"{name}_Assembly", origin, facing)
     fw, fd = 0.06, 0.10                       # frame face width and depth
     fr = MeshBuilder()
@@ -188,39 +190,49 @@ def door(parent, mats, name, origin, facing, width, height, wall_t, sign=True):
     fr.build(f"{name}_Frame", mats["door_frame"], root, bevel=0.006)
     t = 0.045
     yl = 0.0                                  # leaf centre plane, flush with the frame stop
-    leaf = MeshBuilder().box((0, yl, height / 2 + 0.006), (width - 0.006, t, height - 0.012))
-    ob = leaf.build(name, mats["door"], root, bevel=0.004)
-    # Vision panel on the latch side, with a trim frame.
-    vx, vz, vw, vh = width / 2 - 0.26, 1.45, 0.16, 0.62
-    MeshBuilder().box((vx, yl, vz), (vw, t + 0.004, vh)).build(f"{name}_Glass", mats["door_glass"], root)
-    trim = MeshBuilder()
-    for side in (-1, 1):
-        y = yl + side * (t / 2 + 0.004)
-        trim.box((vx, y, vz + vh / 2 + 0.012), (vw + 0.048, 0.008, 0.024))
-        trim.box((vx, y, vz - vh / 2 - 0.012), (vw + 0.048, 0.008, 0.024))
-        trim.box((vx - vw / 2 - 0.012, y, vz), (0.024, 0.008, vh))
-        trim.box((vx + vw / 2 + 0.012, y, vz), (0.024, 0.008, vh))
-    trim.build(f"{name}_GlassTrim", mats["door_frame"], root)
-    hw = MeshBuilder()
-    for side in (-1, 1):                      # lever handles both sides
-        y = yl + side * (t / 2 + 0.004)
-        y_out = y if side > 0 else y - 0.057
-        hw.cylinder((width / 2 - 0.08, y if side > 0 else y - 0.012, 1.0), 0.032, 0.012, 20, axis="y")  # rose
-        hw.cylinder((width / 2 - 0.08, y_out + (0.012 if side > 0 else 0.0), 1.0), 0.012, 0.045, 12, axis="y")
-        hw.box((width / 2 - 0.135, y + side * 0.06, 1.0), (0.13, 0.018, 0.022))     # lever
-        hw.box((0, y + side * 0.001, 0.14), (width - 0.06, 0.003, 0.26))            # kick plate
-    for z in (0.25, height / 2, height - 0.25):                                    # hinges
-        hw.cylinder((-width / 2 + 0.005, yl + t / 2, z - 0.06), 0.011, 0.12, 10)
-    hw.build(f"{name}_Hardware", mats["stainless"], root)
-    closer = MeshBuilder()
-    closer.box((-width / 2 + 0.24, yl + t / 2 + 0.03, height - 0.10), (0.30, 0.05, 0.06))
-    closer.box((-width / 2 + 0.24, yl + t / 2 + 0.06, height + 0.02), (0.24, 0.015, 0.02))   # arm
-    closer.build(f"{name}_Closer", mats["door_frame"], root, bevel=0.005)
+    wl = width / leaves
+    parts = {k: MeshBuilder() for k in ("leaf", "glass", "trim", "hw", "closer", "sign", "tre")}
+    # Each leaf hangs on hinge x `h` and closes toward `d` (+1: latch on its +X side).
+    for h, d in ([(-width / 2, 1)] if leaves == 1 else [(-width / 2, 1), (width / 2, -1)]):
+        marks = {k: len(b.verts) for k, b in parts.items()}
+        c = h + d * wl / 2
+        parts["leaf"].box((c, yl, height / 2 + 0.006), (wl - 0.006, t, height - 0.012))
+        # Vision panel on the latch side, with a trim frame.
+        vx, vz, vw, vh = h + d * (wl - 0.26), 1.45, 0.16, 0.62
+        parts["glass"].box((vx, yl, vz), (vw, t + 0.004, vh))
+        for side in (-1, 1):
+            y = yl + side * (t / 2 + 0.004)
+            parts["trim"].box((vx, y, vz + vh / 2 + 0.012), (vw + 0.048, 0.008, 0.024))
+            parts["trim"].box((vx, y, vz - vh / 2 - 0.012), (vw + 0.048, 0.008, 0.024))
+            parts["trim"].box((vx - vw / 2 - 0.012, y, vz), (0.024, 0.008, vh))
+            parts["trim"].box((vx + vw / 2 + 0.012, y, vz), (0.024, 0.008, vh))
+        hw = parts["hw"]
+        hx = h + d * (wl - 0.08)
+        for side in (-1, 1):                  # lever handles both sides
+            y = yl + side * (t / 2 + 0.004)
+            y_out = y if side > 0 else y - 0.057
+            hw.cylinder((hx, y if side > 0 else y - 0.012, 1.0), 0.032, 0.012, 20, axis="y")  # rose
+            hw.cylinder((hx, y_out + (0.012 if side > 0 else 0.0), 1.0), 0.012, 0.045, 12, axis="y")
+            hw.box((h + d * (wl - 0.135), y + side * 0.06, 1.0), (0.13, 0.018, 0.022))     # lever
+            hw.box((c, y + side * 0.001, 0.14), (wl - 0.06, 0.003, 0.26))                 # kick plate
+        for z in (0.25, height / 2, height - 0.25):                                       # hinges
+            hw.cylinder((h + d * 0.005, yl + t / 2, z - 0.06), 0.011, 0.12, 10)
+        parts["closer"].box((h + d * 0.24, yl + t / 2 + 0.03, height - 0.10), (0.30, 0.05, 0.06))
+        parts["closer"].box((h + d * 0.24, yl + t / 2 + 0.06, height + 0.02), (0.24, 0.015, 0.02))   # arm
+        if sign:
+            parts["sign"].box((c - d * 0.10 * (wl / width), yl + t / 2 + 0.003, 1.55), (0.25, 0.004, 0.18))
+            parts["tre"].cylinder((c - d * 0.10 * (wl / width), yl + t / 2 + 0.006, 1.57), 0.035, 0.002, 18, axis="y")
+        if open_deg:
+            for k, b in parts.items():
+                b.rotate_since(marks[k], (h, yl, 0.0), "z", d * math.radians(open_deg))
+    ob = parts["leaf"].build(name, mats["door"], root, bevel=0.004)
+    parts["glass"].build(f"{name}_Glass", mats["door_glass"], root)
+    parts["trim"].build(f"{name}_GlassTrim", mats["door_frame"], root)
+    parts["hw"].build(f"{name}_Hardware", mats["stainless"], root)
+    parts["closer"].build(f"{name}_Closer", mats["door_frame"], root, bevel=0.005)
     if sign:
-        sg = MeshBuilder().box((-0.10, yl + t / 2 + 0.003, 1.55), (0.25, 0.004, 0.18))
-        sg.build(f"{name}_Sign", mats["sign_yellow"], root)
-        tre = MeshBuilder().cylinder((-0.10, yl + t / 2 + 0.006, 1.57), 0.035, 0.002, 18, axis="y")
-        tre.build(f"{name}_SignTrefoil", mats["sign_magenta"], root)
+        parts["sign"].build(f"{name}_Sign", mats["sign_yellow"], root)
+        parts["tre"].build(f"{name}_SignTrefoil", mats["sign_magenta"], root)
     return ob
 
 
