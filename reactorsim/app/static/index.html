@@ -288,6 +288,21 @@
   </form>
 </dialog>
 
+<dialog id="restartDlg" class="win">
+  <form method="dialog">
+    <div class="win-title"><span>PUR-1 Simulator - Restart</span></div>
+    <div class="win-body">
+    <p class="upd-msg">Restart the simulation from <b id="restartTo"></b>? The reactor, rods, set points,
+      faults, alarms, event log, trends and clock all start over.</p>
+    <div class="dlg-actions">
+      <span class="spacer"></span>
+      <button value="cancel">Cancel</button>
+      <button value="restart" class="primary">Restart</button>
+    </div>
+    </div>
+  </form>
+</dialog>
+
 <div id="toast" class="toast" hidden></div>
 
 <script type="module" src="app.js"></script>

@@ -109,10 +109,13 @@ function buildStatic() {
 
   $("#initial").innerHTML = Object.entries(info.initial_states)
     .map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
-  $("#restart").addEventListener("click", async () => {
-    if (!confirm("Restart the simulation from the selected initial state?")) return;
-    await cmd("reset", { initial: $("#initial").value });
-    resetBuffers();
+  // An in-page dialog, not confirm(): the Mac app's web view can drop native JS dialogs.
+  $("#restart").addEventListener("click", () => {
+    $("#restartTo").textContent = $("#initial").selectedOptions[0]?.textContent ?? "the selected state";
+    $("#restartDlg").showModal();
+  });
+  $("#restartDlg").addEventListener("close", () => {
+    if ($("#restartDlg").returnValue === "restart") cmd("reset", { initial: $("#initial").value });
   });
 
   // Bar tick labels.
@@ -175,7 +178,7 @@ function buildStatic() {
       toggleFullscreen();
       return;
     }
-    if (e.code !== "Escape" || $("#updateDlg").open) return;
+    if (e.code !== "Escape" || $("#updateDlg").open || $("#restartDlg").open) return;
     e.preventDefault();       // Esc is ours: menus and workstations, never the window's full screen
     if (station) closeStation();
     else if (!$("#instructor").hidden) toggleDrawer(false);
@@ -275,6 +278,20 @@ function buildRods() {
     </select></label>`).join("");
   $$("[data-rodfault]").forEach((s) => s.addEventListener("change", () =>
     cmd("rod_fault", { rod: s.dataset.rodfault, fault: s.value })));
+}
+
+// A restart (from this page or another one) starts a new run: drop the old run's trend and
+// events and put typed-in values (rod and servo set points, instructor fields) back to their
+// defaults, so nothing from before the restart is left on the screens.
+function newRun() {
+  resetBuffers();
+  $$(".station input, #instructor input").forEach((i) => {
+    if (i.type === "checkbox") i.checked = i.defaultChecked;
+    else i.value = i.defaultValue;
+  });
+  $$(".station select, #instructor select").forEach((sel) => {
+    sel.value = ([...sel.options].find((o) => o.defaultSelected) ?? sel.options[0])?.value ?? "";
+  });
 }
 
 function resetBuffers() {
@@ -663,8 +680,11 @@ async function poll() {
   polling = true;
   try {
     const s = await api(`/api/state?events_after=${eventsAfter}&trend_after=${trendAfter}${station === "lab" ? "&lab=1" : ""}`);
-    if (state && (s.time_s < state.time_s - 1e-6 || s.event_count < eventsAfter)) {
-      resetBuffers(); // the session was restarted
+    if (state && s.run !== state.run) {
+      // The session was restarted. This reply was asked for with the old run's counters, so
+      // it may be missing the new run's first events: start clean and fetch again.
+      newRun();
+      state = s;
       polling = false;
       return poll();
     }
