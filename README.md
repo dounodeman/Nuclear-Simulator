@@ -68,7 +68,8 @@ The workstations, the menu and every other window look like the plant's own late
 navy title bars, etched group boxes and white value fields.
 
 - **Workstation 1, reactor control** (left-hand monitor): the four neutron channels, rod
-  drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
+  drives you hold to move or send to a set point (type a position in cm and press Go; the drive
+  runs there and stops, one rod withdrawing at a time), linear-channel ranging, the servo, the startup source, scram and
   reset, and the annunciators.
 - **Workstation 2, plant data** (right-hand monitor): the power history, a core camera, pool and
   radiation readings, reactivity and the event log.
@@ -81,7 +82,9 @@ navy title bars, etched group boxes and white value fields.
 
 ![The hard-wired panel on the console](docs/img/console_panel.png)
 
-The monitors, rod position readouts and annunciator lamps show the live plant, and the blades
+The monitors in the hall are copies of the two workstation screens, so whatever is entered at a
+workstation (rod set points, the servo set point, the linear range, the source, the trend window)
+shows on them too. The monitors, rod position readouts and annunciator lamps show the live plant, and the blades
 in the core move with the rods. The video wall is laid out like the real one: power and
 temperature trends down the left over a white plant schematic, a live underwater camera on the
 core across the middle, and the reactor status, a hall camera and the radiation monitors down

@@ -50,6 +50,8 @@ class Rod:
     stuck: bool = False  # fault: rod will not move (including on scram)
     runaway: bool = False  # fault: drive withdraws regardless of command
     target: float | None = field(default=None)  # optional automatic drive-to position
+    setpoint: float | None = None  # last position the operator asked for (kept after it is reached)
+    hold: bool = False  # waiting for another rod's withdrawal to finish (one rod at a time)
 
     @property
     def name(self) -> str:
@@ -88,6 +90,8 @@ class Rod:
                 cmd = 0
                 self.drive_position = min(max(self.target, 0.0), L)
                 self.target = None
+            elif self.hold and err > 0:
+                cmd = 0
             else:
                 cmd = 1 if err > 0 else -1
         if not self.stuck or not self.latched:

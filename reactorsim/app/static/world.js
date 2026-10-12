@@ -643,7 +643,7 @@ export class HallWorld {
 
   // ------------------------------------------------------------------ live plant on the hall's screens
 
-  update(s, trend, ann) {
+  update(s, trend, ann, ui = {}) {
     if (!this.root) return;
     for (const [name, obj] of Object.entries(this.rods)) {
       const r = s.rods[name];
@@ -667,8 +667,8 @@ export class HallWorld {
       o.material.emissiveIntensity = st ? 1.5 : 0;
     });
 
-    if (this.screens.left) drawReactorScreen(this.screens.left, s);
-    if (this.screens.right) drawPlantScreen(this.screens.right, s, trend);
+    if (this.screens.left) drawReactorScreen(this.screens.left, s, ann, ui);
+    if (this.screens.right) drawPlantScreen(this.screens.right, s, trend, ui);
     if (this.screens.center) drawMimicScreen(this.screens.center, s);
     for (const r of ["SS1", "SS2", "RR"]) {
       const sc = this.screens[`ro_${r}`];
@@ -740,50 +740,203 @@ function bg(sc, title, accent = "#0a246a") {
   return h;
 }
 
-function drawReactorScreen(sc, s) {
-  const { ctx: g, cv } = sc;
-  const h = bg(sc, "PUR-1 REACTOR CONTROL", s.scrammed ? "#ff6b6b" : "#0030c0");
-  const W = cv.width;
-  g.textBaseline = "alphabetic";
-  g.fillStyle = "#303030";
-  g.font = `${h * 0.4}px ${SANS}`;
-  g.fillText("POWER (CH2 LOG)", 40, h * 1.9);
-  g.fillStyle = "#000000";
-  g.font = `${h * 1.25}px ${MONO}`;
-  g.fillText(`${fmt(s.channels.ch2_percent)} %`, 40, h * 3.3);
-  g.font = `${h * 0.5}px ${MONO}`;
-  g.fillStyle = "#303030";
-  g.fillText(`Period ${fmtP(s.channels.ch2_period_s)}`, 40, h * 4.1);
-  g.fillText(`Linear ${fmtW(s.channels.ch3_power_w)}   Safety ${s.channels.ch4_percent.toFixed(1)} %`, 40, h * 4.8);
-  // rods
-  const names = Object.keys(s.rods);
-  names.forEach((n, i) => {
-    const r = s.rods[n];
-    const x = W * 0.58 + i * W * 0.13, top = h * 1.5, bh = h * 4.6, bw = W * 0.06;
-    g.strokeStyle = "#808080";
-    g.strokeRect(x, top, bw, bh);
-    g.fillStyle = n === s.regulating_rod ? "#7a3fb0" : "#606870";
-    const f = r.position_cm / r.travel_cm;
-    g.fillRect(x + 4, top + bh * (1 - f), bw - 8, bh * f);
-    g.fillStyle = "#000000";
-    g.font = `${h * 0.42}px ${MONO}`;
-    g.fillText(n, x, top + bh + h * 0.6);
-    g.fillText(r.position_cm.toFixed(1), x, top + bh + h * 1.15);
+// The two workstation monitors in the hall are small copies of the workstation screens the
+// operator opens (index.html): the same group boxes, fields and buttons, filled from the same
+// state, so whatever is entered at a workstation (rod set points, the servo set point, the
+// linear range, the source, the trend window) shows on the monitor too.
+
+const HMI = { face: "#d4d0c8", ground: "#e8e6df", light: "#ffffff", shadow: "#808080", dark: "#404040",
+  navy: "#0a246a", label: "#303030", blue: "#1c4fa0", red: "#e00000", amber: "#ffc000", green: "#00a000" };
+
+function groupBox(g, x, y, w, h, title, fs) {
+  g.strokeStyle = HMI.shadow; g.lineWidth = 1;
+  g.strokeRect(x + 0.5, y + 0.5, w, h);
+  g.strokeStyle = HMI.light;
+  g.strokeRect(x + 1.5, y + 1.5, w, h);
+  g.font = `bold ${fs}px ${SANS}`;
+  const tw = g.measureText(title).width;
+  g.fillStyle = HMI.face;
+  g.fillRect(x + 8, y - fs / 2, tw + 8, fs);
+  g.fillStyle = HMI.navy;
+  g.textBaseline = "middle";
+  g.fillText(title, x + 12, y);
+}
+
+function sunken(g, x, y, w, h, fill = "#ffffff") {
+  g.fillStyle = fill;
+  g.fillRect(x, y, w, h);
+  g.fillStyle = HMI.shadow; g.fillRect(x, y, w, 1); g.fillRect(x, y, 1, h);
+  g.fillStyle = HMI.dark; g.fillRect(x + 1, y + 1, w - 1, 1); g.fillRect(x + 1, y + 1, 1, h - 1);
+  g.fillStyle = HMI.light; g.fillRect(x, y + h - 1, w, 1); g.fillRect(x + w - 1, y, 1, h);
+}
+
+function field(g, x, y, w, h, text, { color = "#000", align = "right", fill = "#ffffff", font = MONO } = {}) {
+  sunken(g, x, y, w, h, fill);
+  g.fillStyle = color;
+  g.font = `${Math.round(h * 0.68)}px ${font}`;
+  g.textBaseline = "middle";
+  g.textAlign = align;
+  g.fillText(text, align === "right" ? x + w - 5 : x + 5, y + h / 2 + 1);
+  g.textAlign = "left";
+}
+
+function button(g, x, y, w, h, text, on = false, disabled = false) {
+  g.fillStyle = on ? "#c3d7f0" : HMI.face;
+  g.fillRect(x, y, w, h);
+  g.fillStyle = on ? HMI.dark : HMI.light; g.fillRect(x, y, w, 1); g.fillRect(x, y, 1, h);
+  g.fillStyle = on ? HMI.light : HMI.dark; g.fillRect(x, y + h - 1, w, 1); g.fillRect(x + w - 1, y, 1, h);
+  g.fillStyle = disabled ? HMI.shadow : on ? HMI.navy : "#000";
+  g.font = `${on ? "bold " : ""}${Math.round(h * 0.55)}px ${SANS}`;
+  g.textBaseline = "middle";
+  g.textAlign = "center";
+  g.fillText(text, x + w / 2, y + h / 2 + 1);
+  g.textAlign = "left";
+}
+
+function segBar(g, x, y, w, h, f, color = HMI.blue) {
+  sunken(g, x, y, w, h);
+  const n = Math.floor((w - 4) * Math.min(Math.max(f, 0), 1) / 7);
+  g.fillStyle = color;
+  for (let i = 0; i < n; i++) g.fillRect(x + 2 + i * 7, y + 2, 5, h - 4);
+}
+
+function label(g, text, x, y, size, color = HMI.label, bold = false) {
+  g.fillStyle = color;
+  g.font = `${bold ? "bold " : ""}${size}px ${SANS}`;
+  g.textBaseline = "middle";
+  g.fillText(text, x, y);
+}
+
+function statusBar(g, W, H, parts) {
+  const h = 26, y = H - h - 2;
+  g.fillStyle = HMI.face; g.fillRect(0, y - 2, W, h + 4);
+  let x = 4;
+  parts.forEach(([text, w], i) => {
+    const ww = w || (W - 8 - parts.slice(1).reduce((t, p) => t + (p[1] || 0) + 4, 0));
+    sunken(g, x, y, ww, h, HMI.face);
+    label(g, text, x + 6, y + h / 2 + 1, 15, i === 0 && /SCRAM/.test(text) ? HMI.red : HMI.label, /SCRAM/.test(text));
+    x += ww + 4;
   });
-  // status line
-  const y = h * 8.2;
-  g.font = `600 ${h * 0.55}px ${SANS}`;
-  if (s.scrammed) {
-    g.fillStyle = "#e00000";
-    g.fillRect(0, h * 7.4, W, h * 1.6);
-    g.fillStyle = "#fff";
-    g.fillText("SCRAM  " + s.scram_causes.join("; ").slice(0, 60), 40, y);
-  } else {
-    g.fillStyle = s.servo.enabled ? "#008000" : "#303030";
-    g.fillText(s.servo.enabled ? `SERVO ON  ${fmtW(s.servo.setpoint_w)}` : "SERVO OFF", 40, y);
-    g.fillStyle = "#0030c0";
-    g.fillText("Click to use", W - 260, y);
-  }
+}
+
+function titleBar(g, W, title, red) {
+  g.fillStyle = HMI.face; g.fillRect(0, 0, W, 576);
+  const grad = g.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0, red ? "#a00000" : HMI.navy);
+  grad.addColorStop(1, red ? "#f08080" : "#a6caf0");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, 30);
+  label(g, title, 10, 16, 17, "#ffffff", true);
+  for (let k = 0; k < 3; k++) button(g, W - 28 - k * 24, 5, 21, 20, "");
+}
+
+const ANN_LABELS = { scram: "SCRAM", setback: "SETBACK", interlock: "ROD INTLK", period: "SHORT PERIOD",
+  power: "HIGH POWER", chan: "CHANNEL", pooltemp: "POOL TEMP", poollevel: "POOL LEVEL", rad: "RADIATION",
+  servo: "SERVO", source: "SOURCE IN", rps: "RPS" };
+
+function hhmmss(t) {
+  const s = Math.floor(t);
+  return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
+function drawReactorScreen(sc, s, ann = {}, ui = {}) {
+  const { ctx: g, cv } = sc;
+  const W = cv.width, H = cv.height;
+  titleBar(g, W, "PUR-1 RCS - Reactor Control (Workstation 1)", s.scrammed);
+  // Annunciator tiles
+  const keys = Object.keys(ANN_LABELS), tw = (W - 8) / keys.length;
+  keys.forEach((k, i) => {
+    const st = ann[k];
+    const blink = st === "alarm" && Math.floor(performance.now() / 500) % 2;
+    const fill = st === "alarm" && !blink ? HMI.red : st === "warn" ? HMI.amber : st === "ok" ? "#58d058" : "#f2f0ea";
+    sunken(g, 4 + i * tw, 36, tw - 3, 30, fill);
+    g.fillStyle = st === "alarm" && !blink ? "#fff" : st ? "#000" : "#505050";
+    g.font = `bold 10px ${SANS}`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(ANN_LABELS[k], 4 + i * tw + tw / 2, 52);
+    g.textAlign = "left";
+  });
+  const top = 84, bot = H - 36;
+  const ch = s.channels;
+
+  // Nuclear instruments
+  const nx = 6, nw = 340;
+  groupBox(g, nx, top, nw, bot - top, "Nuclear instruments", 14);
+  const chans = [
+    ["CH1 Startup", fmt(ch.ch1_cps), "cps", Math.log10(Math.max(ch.ch1_cps, 0.1) / 0.1) / 6, ch.faults.ch1 !== "none"],
+    ["CH2 Log power", fmt(ch.ch2_percent), "%", (Math.log10(Math.max(ch.ch2_percent, 1e-5)) + 5) / 7, ch.faults.ch2 !== "none" || !ch.ch2_hv_ok],
+    ["CH3 Linear power", fmtW(ch.ch3_power_w), "", ch.ch3_percent_of_range / 150, ch.faults.ch3 !== "none"],
+    ["CH4 Safety", ch.ch4_percent.toFixed(1), "%", ch.ch4_percent / 150, ch.faults.ch4 !== "none"],
+  ];
+  const rowH = (bot - top - 16) / 4;
+  chans.forEach(([name, v, unit, f, fault], i) => {
+    const y = top + 14 + i * rowH;
+    label(g, name, nx + 10, y + 10, 15, HMI.navy, true);
+    if (i === 0 || i === 1) label(g, `Period ${fmtP(i === 0 ? ch.ch1_period_s : ch.ch2_period_s)}`, nx + 190, y + 10, 13);
+    if (i === 2) label(g, `range ${ch.ch3_range + 1}/16${ch.auto_range ? " AUTO" : ""}`, nx + 190, y + 10, 13);
+    field(g, nx + 10, y + 22, 190, 30, v, { color: fault ? HMI.red : "#000", fill: fault ? "#fff0c0" : "#fff" });
+    label(g, unit, nx + 206, y + 38, 14);
+    segBar(g, nx + 10, y + 58, nw - 24, 14, f, f > 0.8 ? "#d08000" : HMI.blue);
+  });
+
+  // Control rods
+  const rx = nx + nw + 10, rw = 330;
+  groupBox(g, rx, top, rw, bot - top, "Control rods", 14);
+  const names = Object.keys(s.rods), cw = rw / names.length;
+  names.forEach((n, i) => {
+    const r = s.rods[n], cx = rx + i * cw + cw / 2;
+    const colTop = top + 40, colH = 220, colW = 40;
+    label(g, n, cx - 12, top + 22, 15, HMI.navy, true);
+    sunken(g, cx - colW / 2, colTop, colW, colH);
+    const f = r.position_cm / r.travel_cm;
+    g.fillStyle = n === s.regulating_rod ? "#7a3fb0" : "#606870";
+    g.fillRect(cx - colW / 2 + 9, colTop + colH * (1 - f), colW - 18, colH * f);
+    if (r.setpoint_cm !== null) {
+      const y = colTop + colH * (1 - r.setpoint_cm / r.travel_cm);
+      g.strokeStyle = "#0030c0"; g.lineWidth = 2; g.setLineDash([5, 3]);
+      g.beginPath(); g.moveTo(cx - colW / 2 - 4, y); g.lineTo(cx + colW / 2 + 4, y); g.stroke();
+      g.setLineDash([]); g.lineWidth = 1;
+    }
+    g.fillStyle = "#e06000";
+    g.fillRect(cx - colW / 2 + 2, colTop + colH * (1 - r.drive_cm / r.travel_cm) - 1, colW - 4, 3);
+    field(g, cx - 44, colTop + colH + 8, 88, 24, `${r.position_cm.toFixed(1)} cm`);
+    const servo = n === s.regulating_rod && s.servo.enabled;
+    const state = !r.latched ? ["UNLATCHED", HMI.red] : r.waiting ? ["WAITING", "#0030c0"]
+      : r.target_cm !== null ? ["TO SET PT", "#0030c0"] : r.moving ? [r.command > 0 ? "WITHDRAW" : "INSERT", "#0030c0"]
+        : servo ? ["ON SERVO", "#0030c0"] : r.setpoint_cm !== null ? ["AT SET PT", HMI.label] : ["", HMI.label];
+    g.textAlign = "center";
+    label(g, state[0], cx, colTop + colH + 44, 12, state[1], true);
+    g.textAlign = "left";
+    label(g, "Set point", cx - 44, colTop + colH + 64, 12);
+    field(g, cx - 44, colTop + colH + 74, 88, 24, r.setpoint_cm !== null ? `${r.setpoint_cm.toFixed(1)} cm` : servo ? "servo" : "",
+      { color: "#0030c0" });
+  });
+
+  // Automatic power control, source and scram
+  const ax = rx + rw + 10, aw = W - ax - 6;
+  groupBox(g, ax, top, aw, bot - top, "Automatic power control", 14);
+  button(g, ax + 12, top + 18, 110, 28, s.servo.enabled ? "Servo ON" : "Servo OFF", s.servo.enabled);
+  label(g, "Setpoint", ax + 12, top + 66, 14);
+  // The set point field as it stands at the workstation (before Set, it is what was typed).
+  field(g, ax + 80, top + 54, aw - 120, 26, fmtW(ui.servoSetpointW || s.servo.setpoint_w));
+  label(g, "Deviation", ax + 12, top + 100, 14);
+  field(g, ax + 80, top + 88, aw - 120, 26, s.servo.enabled ? `${(s.servo.error * 100).toFixed(1)} %` : "-");
+  label(g, "Startup source", ax + 12, top + 136, 14, HMI.label, true);
+  button(g, ax + 12, top + 150, 110, 28, s.source_inserted ? "Source IN" : "Source OUT", s.source_inserted);
+  // Scram button
+  const bx = ax + aw / 2, by = top + 270, br = 56;
+  g.fillStyle = "#f0c000"; g.beginPath(); g.arc(bx, by, br + 8, 0, Math.PI * 2); g.fill();
+  const rg = g.createRadialGradient(bx - 14, by - 16, 6, bx, by, br);
+  rg.addColorStop(0, "#ff5a4a"); rg.addColorStop(0.6, "#d01010"); rg.addColorStop(1, "#8a0000");
+  g.fillStyle = rg; g.beginPath(); g.arc(bx, by, br, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#fff"; g.font = `bold 18px ${SANS}`; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText("SCRAM", bx, by + 1);
+  g.textAlign = "left";
+  button(g, bx - 60, by + br + 18, 120, 26, "Reset scram", false, !s.scrammed);
+
+  const msg = s.scrammed ? `SCRAM: ${s.scram_causes.join("; ")}`.slice(0, 70)
+    : s.interlocks.length ? `Interlock: ${s.interlocks.join("; ")}`.slice(0, 70) : "Ready · click to use";
+  statusBar(g, W, H, [[msg], ["RTP 3000", 110], [hhmmss(s.time_s), 100]]);
 }
 
 function drawMimicScreen(sc, s) {
@@ -810,6 +963,12 @@ function drawMimicScreen(sc, s) {
     const f = rod ? rod.position_cm / rod.travel_cm : 0;
     g.fillStyle = n === s.regulating_rod ? "#7a3fb0" : "#303030";
     g.fillRect(gx + c * cell + 8, gy + r * cell + 8 + (cell - 22) * f, cell - 22, (cell - 22) * (1 - f));
+    if (rod && rod.setpoint_cm !== null) {
+      const y = gy + r * cell + 8 + (cell - 22) * (rod.setpoint_cm / rod.travel_cm);
+      g.strokeStyle = "#ffc000"; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(gx + c * cell + 4, y); g.lineTo(gx + c * cell + cell - 10, y); g.stroke();
+      g.lineWidth = 1;
+    }
     g.fillStyle = "#ffffff";
     g.fillText(n, gx + c * cell + 14, gy + r * cell + cell / 2 - 3);
   }
@@ -836,60 +995,87 @@ function drawMimicScreen(sc, s) {
   g.fillText("Read only: use the left workstation to operate", x, h * 8.3);
 }
 
-function drawPlantScreen(sc, s, trend) {
+function drawPlantScreen(sc, s, trend, ui = {}) {
   const { ctx: g, cv } = sc;
-  const h = bg(sc, "PLANT DATA", "#b06000");
-  const W = cv.width;
-  // mini power trend, last 10 minutes, log 1 mW to 100 kW
-  const x0 = 40, y0 = h * 1.4, pw = W * 0.6, ph = h * 4.4;
-  g.strokeStyle = "#c8c8c8";
+  const W = cv.width, H = cv.height;
+  titleBar(g, W, "PUR-1 DAS - Plant Data (Workstation 2)", false);
+  const top = 50, mid = 320, bot = H - 36;
+  // Power history, over the window chosen at the workstation
+  const win = ui.trendWindow || 600;
+  const tw = 600;
+  groupBox(g, 6, top, tw, mid - top - 14, "Power history", 14);
+  [[60, "1 min"], [600, "10 min"], [3600, "1 h"]].forEach(([w, t], i) => button(g, tw - 190 + i * 64, top + 8, 60, 22, t, w === win));
+  const x0 = 50, y0 = top + 38, pw = tw - 60, ph = mid - top - 80;
+  sunken(g, x0 - 2, y0 - 2, pw + 4, ph + 4);
+  g.strokeStyle = "#c8c8c8"; g.lineWidth = 1;
   for (let e = -3; e <= 5; e++) {
     const yy = y0 + ph * (1 - (e + 3) / 8);
     g.beginPath(); g.moveTo(x0, yy); g.lineTo(x0 + pw, yy); g.stroke();
+    label(g, e >= 3 ? `${10 ** (e - 3)} kW` : e >= 0 ? `${10 ** e} W` : `${10 ** (e + 3)} mW`, 8, yy, 10);
   }
-  const t1 = s.time_s, t0 = t1 - 600;
-  g.strokeStyle = "#0030c0";
-  g.lineWidth = 3;
+  const t1 = s.time_s, t0 = t1 - win;
+  g.strokeStyle = "#0030c0"; g.lineWidth = 2;
   g.beginPath();
   let first = true;
   for (const p of trend) {
     if (p[0] < t0) continue;
     const w = Math.max(p[2] / 100 * s.reactor.rated_w, 1e-3);
-    const xx = x0 + ((p[0] - t0) / 600) * pw, yy = y0 + ph * (1 - (Math.log10(w) + 3) / 8);
+    const xx = x0 + ((p[0] - t0) / win) * pw, yy = y0 + ph * (1 - (Math.log10(w) + 3) / 8);
     first ? g.moveTo(xx, yy) : g.lineTo(xx, yy);
     first = false;
   }
   g.stroke();
   g.lineWidth = 1;
-  g.fillStyle = "#303030";
-  g.font = `${h * 0.38}px ${SANS}`;
-  g.textBaseline = "alphabetic";
-  g.fillText("Power, last 10 min", x0, y0 + ph + h * 0.6);
-  // numbers
-  const rx = x0 + pw + 40;
+
+  // Pool and radiation
+  const px = tw + 16, pwid = W - px - 6;
+  groupBox(g, px, top, pwid, mid - top - 14, "Pool and radiation", 14);
   const rows = [
-    ["Pool", `${s.process.pool_temp_c.toFixed(2)} °C`],
-    ["Level", `${s.process.pool_level_m.toFixed(2)} m`],
-    ["Pool top", `${fmt(s.radiation_mr_h.pool_top)} mR/h`],
-    ["Chiller", s.process.chiller_available ? "on" : "TRIP"],
+    ["Pool temperature", `${s.process.pool_temp_c.toFixed(2)} °C`, s.process.pool_temp_c > 29.7 ? "warn" : ""],
+    ["Water above core", `${s.process.pool_level_m.toFixed(2)} m`, s.process.pool_level_m < 3.96 ? "alarm" : ""],
+    ["Chiller", s.process.chiller_available ? "running" : "tripped", s.process.chiller_available ? "" : "warn"],
+    ["Pool top", `${fmt(s.radiation_mr_h.pool_top)} mR/h`, s.radiation_mr_h.pool_top >= 50 ? "alarm" : ""],
+    ["Console", `${fmt(s.radiation_mr_h.console)} mR/h`, s.radiation_mr_h.console >= 7.5 ? "alarm" : ""],
+    ["Water monitor", `${fmt(s.radiation_mr_h.water)} mR/h`, s.radiation_mr_h.water >= 7.5 ? "alarm" : ""],
+    ["Air monitor", `${fmt(s.radiation_mr_h.air)} mR/h`, s.radiation_mr_h.air >= 1 ? "alarm" : ""],
   ];
-  rows.forEach(([k, v], i) => {
-    g.fillStyle = "#303030";
-    g.font = `${h * 0.38}px ${SANS}`;
-    g.fillText(k, rx, y0 + h * (0.4 + i * 1.1));
-    g.fillStyle = "#000000";
-    g.font = `${h * 0.55}px ${MONO}`;
-    g.fillText(v, rx, y0 + h * (0.95 + i * 1.1));
+  rows.forEach(([k, v, c], i) => {
+    const y = top + 18 + i * 31;
+    label(g, k, px + 10, y + 12, 14);
+    field(g, px + pwid - 170, y, 160, 24, v, {
+      fill: c === "alarm" ? HMI.red : c === "warn" ? HMI.amber : "#fff", color: c === "alarm" ? "#fff" : "#000" });
   });
-  // alarms
-  g.font = `${h * 0.42}px ${SANS}`;
-  const alarms = s.alarms.length ? s.alarms : ["No active alarms"];
-  alarms.slice(0, 2).forEach((a, i) => {
-    g.fillStyle = s.alarms.length ? "#b06000" : "#008000";
-    g.fillText(a.slice(0, 64), 40, h * (7.4 + i * 0.7));
+
+  // Reactivity and the event log
+  groupBox(g, 6, mid, 300, bot - mid - 6, "Reactivity", 14);
+  const rho = s.reactivity_dollars;
+  label(g, "Net reactivity", 16, mid + 30, 14);
+  field(g, 140, mid + 18, 156, 24, ui.truth ? `${rho.total >= 0 ? "+" : "−"}$${Math.abs(rho.total).toFixed(4)}` : "true values off",
+    { font: ui.truth ? MONO : SANS });
+  label(g, "Control rods", 16, mid + 64, 14);
+  field(g, 140, mid + 52, 156, 24, ui.truth ? `${rho.rods >= 0 ? "+" : "−"}$${Math.abs(rho.rods).toFixed(3)}` : "-");
+  label(g, "Experiments", 16, mid + 98, 14);
+  field(g, 140, mid + 86, 156, 24, ui.truth ? `${rho.experiments >= 0 ? "+" : "−"}$${Math.abs(rho.experiments).toFixed(3)}` : "-");
+
+  const lx = 318, lw = W - lx - 6;
+  groupBox(g, lx, mid, lw, bot - mid - 6, "Event log", 14);
+  sunken(g, lx + 8, mid + 14, lw - 16, bot - mid - 30);
+  const evs = (ui.events || []).slice(-6).reverse();
+  evs.forEach((e, i) => {
+    const y = mid + 30 + i * 30;
+    if (e.kind === "scram" || e.kind === "limit") { g.fillStyle = "#ffd8d8"; g.fillRect(lx + 10, y - 12, lw - 20, 26); }
+    label(g, hhmmss(e.t), lx + 14, y, 13, "#606060");
+    g.font = `13px ${MONO}`;
+    label(g, e.kind.toUpperCase(), lx + 90, y, 11,
+      e.kind === "scram" || e.kind === "limit" ? HMI.red : e.kind === "operator" ? "#0030c0" : "#404040", true);
+    g.font = `13px ${MONO}`;
+    g.fillStyle = "#000";
+    g.fillText(e.message.slice(0, 58), lx + 170, y);
   });
-  g.fillStyle = "#b06000";
-  g.fillText("Click to use", W - 230, h * 8.6);
+  if (!evs.length) label(g, "No events yet", lx + 14, mid + 30, 13, "#606060");
+
+  const alarm = s.alarms.length ? s.alarms[0].slice(0, 70) : "Ready · click to use";
+  statusBar(g, W, H, [[alarm], ["Historian", 110], [hhmmss(s.time_s), 100]]);
 }
 
 function drawSegment(sc, text, color) {
@@ -1076,15 +1262,22 @@ function statusTile(sc, s) {
   });
   // rod bars
   Object.entries(s.rods).forEach(([n, r], i) => {
-    const x = W * 0.62 + i * W * 0.12, top = hh + 20, bh = H * 0.62, bw = W * 0.07;
+    const x = W * 0.62 + i * W * 0.12, top = hh + 20, bh = H * 0.55, bw = W * 0.07;
     g.strokeStyle = "#3a5a3a"; g.strokeRect(x, top, bw, bh);
     const f = r.position_cm / r.travel_cm;
     g.fillStyle = n === s.regulating_rod ? "#c084fc" : "#30e030";
     g.fillRect(x + 3, top + bh * (1 - f), bw - 6, bh * f);
+    if (r.setpoint_cm !== null) {
+      const y = top + bh * (1 - r.setpoint_cm / r.travel_cm);
+      g.strokeStyle = "#ffe030"; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x - 4, y); g.lineTo(x + bw + 4, y); g.stroke();
+      g.lineWidth = 1;
+    }
     g.fillStyle = "#e0ffe0";
     g.font = `${H * 0.06}px ${MONO}`;
     g.fillText(n, x, top + bh + H * 0.08);
     g.fillText(r.position_cm.toFixed(1), x, top + bh + H * 0.15);
+    if (r.setpoint_cm !== null) { g.fillStyle = "#ffe030"; g.fillText(`SP${r.setpoint_cm.toFixed(0)}`, x, top + bh + H * 0.22); }
   });
 }
 
