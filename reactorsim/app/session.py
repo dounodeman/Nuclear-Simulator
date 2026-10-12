@@ -141,7 +141,10 @@ class SimSession:
                     "travel_cm": rod.spec.length_cm,
                     "latched": rod.latched,
                     "falling": rod.falling,
-                    "moving": rod.command != 0 or rod.target is not None or rod.runaway,
+                    "moving": rod.command != 0 or (rod.target is not None and not rod.hold) or rod.runaway,
+                    "target_cm": rod.target,
+                    "setpoint_cm": rod.setpoint,
+                    "waiting": rod.hold,
                     "command": rod.command,
                     "stuck": rod.stuck,
                     "runaway": rod.runaway,
@@ -228,8 +231,17 @@ class SimSession:
                     raise CommandError("The servo is driving the regulating rod; switch it to manual first")
                 s.drive(a["rod"], a["direction"])
             elif action == "drive_to":
-                self._rod(a["rod"])
-                s.drive_to(a["rod"], float(a["position_cm"]))
+                rod = self._rod(a["rod"])
+                try:
+                    x = float(a["position_cm"])
+                except (TypeError, ValueError):
+                    raise CommandError("set point must be a number of cm") from None
+                if not math.isfinite(x):
+                    raise CommandError("set point must be a number of cm")
+                if s.servo_drives(a["rod"]):
+                    raise CommandError("The servo is driving the regulating rod; switch it to manual first")
+                s.drive_to(a["rod"], x)
+                s._event("operator", f"{a['rod']} set point {rod.target:.1f} cm")
             elif action == "stop_all":
                 s.stop_all()
             elif action == "scram":

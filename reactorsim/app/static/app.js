@@ -19,6 +19,7 @@ let world = null;         // the walkable hall
 let station = null;       // open workstation: "reactor", "plant" or null
 let menuBg = null;        // the main menu's animated background, until the hall is entered
 const ann = {};           // annunciator states, shared with the hall's lamps
+let recentEvents = [];    // newest last, for the event log mirrored on the hall's plant monitor
 
 // ------------------------------------------------------------------ API
 
@@ -211,15 +212,19 @@ function buildInstructor() {
 
 function buildRods() {
   const reg = state.regulating_rod;
-  $("#rods").innerHTML = Object.keys(state.rods).map((name) => `
+  $("#rods").innerHTML = Object.entries(state.rods).map(([name, r]) => `
     <div class="rod ${name === reg ? "rr" : "ss"}" data-rod="${name}">
       <div class="rod-name">${name}</div>
-      <div class="rod-col"><div class="core-zone"></div><div class="blade"></div><div class="drive"></div></div>
+      <div class="rod-col"><div class="core-zone"></div><div class="blade"></div><div class="sp-mark"></div><div class="drive"></div></div>
       <div class="rod-pos digits">-</div>
       <div class="rod-state"></div>
       <div class="rod-btns">
         <button data-dir="in" title="Hold to drive in">IN ▼</button>
         <button data-dir="out" title="Hold to drive out">OUT ▲</button>
+      </div>
+      <div class="rod-sp" title="Set point: the drive runs in or out to this position and stops">
+        <input type="number" data-sp step="0.1" min="0" max="${r.travel_cm}" placeholder="cm" aria-label="${name} set point, cm">
+        <button data-go>Go</button>
       </div>
       <div class="rod-worth"></div>
     </div>`).join("");
@@ -250,6 +255,15 @@ function buildRods() {
       b.addEventListener("pointercancel", stop);
       b.addEventListener("lostpointercapture", stop);
     });
+    // Set point: type a position in cm and press Go or Enter; the drive runs there and stops.
+    const sp = $("[data-sp]", el);
+    const go = () => {
+      if (sp.value.trim() === "") return;
+      cmd("drive_to", { rod: name, position_cm: +sp.value });
+      sp.blur();
+    };
+    $("[data-go]", el).addEventListener("click", go);
+    sp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
   });
 
   $("#rodFaults").innerHTML = Object.keys(state.rods).map((name) => `
@@ -264,6 +278,7 @@ function resetBuffers() {
   trend = [];
   trendAfter = -1;
   eventsAfter = 0;
+  recentEvents = [];
   $("#events").innerHTML = "";
 }
 
@@ -432,13 +447,21 @@ function render() {
     else if (r.stuck) [label, cls] = ["stuck", "bad"];
     else if (r.falling) [label, cls] = ["dropping", "bad"];
     else if (!r.latched) [label, cls] = ["unlatched · drive in", "bad"];
+    else if (r.waiting) [label, cls] = ["waiting: one rod at a time", "moving"];
+    else if (r.target_cm !== null) [label, cls] = [`to set point ${r.target_cm.toFixed(1)} cm`, "moving"];
     else if (r.moving) [label, cls] = [r.command > 0 ? "withdrawing" : r.command < 0 ? "inserting" : "moving", "moving"];
     else if (name === s.regulating_rod && s.servo.enabled) [label, cls] = ["on servo", "moving"];
+    else if (r.setpoint_cm !== null) [label, cls] = ["at set point", ""];
     st.textContent = label;
     st.className = `rod-state ${cls}`;
+    const mark = $(".sp-mark", el);
+    mark.hidden = r.setpoint_cm === null;
+    if (r.setpoint_cm !== null) mark.style.bottom = `${(r.setpoint_cm / r.travel_cm) * 100}%`;
+    const sp = $("[data-sp]", el);
+    if (document.activeElement !== sp && r.setpoint_cm !== null) sp.value = r.setpoint_cm.toFixed(1);
     $(".rod-worth", el).textContent = `holds −$${r.worth_dollars.toFixed(2)}`;
     const servoOwned = name === s.regulating_rod && s.servo.enabled;
-    $$("[data-dir]", el).forEach((b) => (b.disabled = servoOwned));
+    $$("[data-dir], [data-sp], [data-go]", el).forEach((b) => (b.disabled = servoOwned));
   }
 
   // Servo / source / scram
@@ -524,7 +547,7 @@ function render() {
   }
 
   view?.update(s);
-  world?.update(s, trend, ann);
+  world?.update(s, trend, ann, { trendWindow, events: recentEvents, truth, servoSetpointW: +$("#setpoint").value });
   $("#speedTag").textContent = s.speed === 0 ? "paused" : `${s.speed}×`;
   $("#speedTag").classList.toggle("paused", s.speed === 0);
 }
@@ -538,7 +561,9 @@ function appendEvents(events) {
     $(".kind", li).textContent = e.kind;
     $(".m", li).textContent = e.message;
     ol.prepend(li);
+    recentEvents.push(e);
   }
+  if (recentEvents.length > 20) recentEvents = recentEvents.slice(-20);
   while (ol.children.length > 500) ol.lastChild.remove();
 }
 

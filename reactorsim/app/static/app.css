@@ -189,6 +189,11 @@ body:not(.truth) .truth { display: none; }
 .rod-btns button { padding: 6px 10px; font-weight: 600; touch-action: none; }
 .rod-btns button.held { background: #12324a; border-color: var(--accent); }
 .rod-worth { font: 11px var(--mono); color: var(--dim); }
+.rod-col .sp-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed var(--accent); z-index: 1; }
+.rod-col .sp-mark[hidden] { display: none; }
+.rod-sp { display: flex; gap: 2px; align-items: center; }
+.rod-sp input[type=number] { width: 58px; }
+.rod-sp button { padding: 2px 6px; }
 .row-ctl { display: flex; justify-content: center; margin-top: 10px; }
 .sub-panel { border-top: 1px solid var(--line); margin-top: 12px; }
 .servo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
