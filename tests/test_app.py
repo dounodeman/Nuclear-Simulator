@@ -57,6 +57,32 @@ def test_instructor_experiment_and_bad_commands():
         s.command("speed", speed=7)
 
 
+@pytest.mark.parametrize("initial", ["cold", "critical_1kw", "power_10kw"])
+def test_restart_puts_everything_back(initial):
+    """Restart after a long, eventful run matches a session freshly started in that state."""
+    fresh = SimSession(initial, seed=1)
+    s = SimSession("power_10kw", seed=1)
+    run = s.state()["run"]
+    s.command("speed", speed=10.0)
+    s.command("chiller", available=False)
+    s.command("leak", m_per_hour=5)
+    s.command("rod_fault", rod="SS1", fault="stuck")
+    s.command("channel_fault", channel="ch3", mode="stuck")
+    s.command("protection", enabled=False, failed_trips=["period"])
+    s.command("experiment", dollars=0.3, ramp_s=5)
+    s.advance(300.0)
+    s.command("reset", initial=initial)
+    after, want = s.state(), fresh.state()
+    assert after["run"] == run + 1
+    assert after["speed"] == 1.0 and after["time_s"] == 0.0
+    assert [e["message"] for e in after["events"]] == [e["message"] for e in want["events"]]
+    assert len(after["trend"]) == 1
+    for d in (after, want):
+        for k in ("run", "events", "trend"):
+            d.pop(k)
+    assert after == want
+
+
 def test_events_and_trend_are_incremental():
     s = SimSession("cold", seed=1)
     s.advance(5.0)

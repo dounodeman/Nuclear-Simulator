@@ -54,11 +54,14 @@ class SimSession:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.speed = 1.0
+        self.run = 0  # counts restarts, so the page can tell a new run from the old one
         self.reset(initial)
 
     # ------------------------------------------------------------------ lifecycle
 
     def reset(self, initial: str = "cold") -> None:
+        """Start the plant over from ``initial``: a fresh simulator (reactor, rods, set points,
+        faults, alarms, events, clock) at real-time speed, with an empty trend."""
         if initial not in INITIAL_STATES:
             raise CommandError(f"unknown initial state {initial!r}")
         seed = self._seed if self._seed is not None else int(time.time() * 1e3) % 2**31
@@ -77,6 +80,8 @@ class SimSession:
         with self._lock:
             self.sim = sim
             self.initial = initial
+            self.run += 1
+            self.speed = 1.0
             self.trend: deque[tuple] = deque(maxlen=TREND_LEN)
             self._next_trend = 0.0
             self._sample_trend()
@@ -155,6 +160,7 @@ class SimSession:
                 "reactor": {"key": d.key, "name": d.name, "rated_w": d.rated_power,
                             "licensed_w": d.licensed_power},
                 "initial": self.initial,
+                "run": self.run,
                 "time_s": s.t,
                 "speed": self.speed,
                 "true": {
