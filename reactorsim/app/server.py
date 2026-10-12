@@ -1,6 +1,7 @@
 """Local HTTP server for the control room: static page, 3D models and a small JSON API.
 
-    GET  /api/state?events_after=N&trend_after=T   plant state, new events and new trend samples
+    GET  /api/state?events_after=N&trend_after=T&lab=1   plant state, new events and trend samples
+                                                     (lab=1 adds the gamma spectrum)
     POST /api/command   {"action": ..., ...}       operator and instructor actions
     GET  /api/info                                  reactor, initial states, speeds, build
     GET  /api/update                                check GitHub for a newer app build
@@ -88,7 +89,8 @@ class _Handler(BaseHTTPRequestHandler):
         if p == "/api/state":
             events_after = int(q.get("events_after", ["0"])[0])
             trend_after = float(q.get("trend_after", ["-1"])[0])
-            self._json(self.server.session.state(events_after, trend_after))
+            lab = q.get("lab", ["0"])[0] == "1"
+            self._json(self.server.session.state(events_after, trend_after, lab_spectrum=lab))
         elif p == "/api/info":
             self._json({
                 "version": __version__, "build": _build.BUILD, "commit": _build.COMMIT,

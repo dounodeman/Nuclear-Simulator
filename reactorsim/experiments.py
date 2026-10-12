@@ -718,6 +718,184 @@ def _plot_power_cal(sim, res, path):
     _save(plt, fig, ax, path)
 
 
+# ---------------------------------------------------------------------------- materials science
+
+class _LabBench:
+    """The reactor and the materials lab run together, as in the control room session."""
+
+    def __init__(self, seed: int | None, power_w: float, unknown_seed: int = 0):
+        from reactorsim.materials import MaterialsLab
+        self.sim = Simulator(seed=seed, max_substep=2.0)
+        d = self.sim.design
+        _place_at_power(self.sim, power_w, reg_position_cm=30.0)
+        self.sim.set_servo(True, power_w)
+        self.sim.auto_range = True
+        self.lab = MaterialsLab(d.flux_per_watt, d.delayed.beta_total,
+                                np.random.default_rng(None if seed is None else seed + 1), unknown_seed)
+        self.sim.recorder = Recorder()
+
+    @property
+    def t(self) -> float:
+        return self.sim.t
+
+    def run(self, seconds: float, step: float = 1.0) -> None:
+        end = self.sim.t + seconds
+        while self.sim.t < end - 1e-9:
+            h = min(step, end - self.sim.t)
+            t0, e0 = self.sim.t, self.sim.energy_j
+            self.sim.run(h, dt=min(h, 0.5), record_every=60.0, each_step=self.sim.recorder)
+            self.lab.advance(self.sim.t - t0, (self.sim.energy_j - e0) / (self.sim.t - t0), t0)
+
+    def irradiate(self, samples, position: str, seconds: float) -> None:
+        for smp in samples:
+            self.sim.insert_reactivity(self.lab.insert(smp.id, position, self.t), ramp_seconds=5.0)
+        self.run(seconds, step=5.0)
+        for smp in samples:
+            self.sim.insert_reactivity(self.lab.remove(smp.id, self.t), ramp_seconds=5.0)
+
+    def count(self, smp, live_s: float, shelf_cm: float = 10.0) -> dict:
+        c = self.lab.start_count(smp.id, live_s, shelf_cm, self.t)
+        step = max(min(live_s / 40, 30.0), 0.5)
+        while not c.done:
+            self.run(step, step=step)
+        return smp.counts[-1]
+
+
+def _flux_pair(bench: _LabBench, position: str, seconds: float, shelf_cm: float = 25.0, live_s: float = 300.0):
+    bare = bench.lab.prepare("gold_foil")
+    cov = bench.lab.prepare("gold_foil", cadmium=True)
+    bench.irradiate([bare, cov], position, seconds)
+    bench.run(60)
+    bench.count(bare, live_s, shelf_cm)
+    bench.count(cov, live_s, shelf_cm)
+    return bare, cov
+
+
+def foil_activation(seed: int | None = 1, position: str = "core_center", power_w: float = 1000.0,
+                    minutes: float = 15.0):
+    """Thermal and epithermal neutron flux and the cadmium ratio from bare and cadmium-covered gold foils."""
+    bench = _LabBench(seed, power_w)
+    bare, cov = _flux_pair(bench, position, minutes * 60)
+    f = bench.lab.results(bench.t)["flux"][position]
+    th, epi, _ = bench.lab.flux(position, 1000.0)
+    from reactorsim.materials import REACTIONS
+    au = REACTIONS["Au-198"][1]
+    true_cr = (au.sigma_b * th + au.ri_b * epi) / (au.ri_b * epi)
+    result = {
+        "measured": {"thermal_flux_per_kw": _r(f["thermal_per_kw"], -1), "epithermal_flux_per_kw": _r(f["epithermal_per_kw"], -1),
+                     "cadmium_ratio": _r(f["cadmium_ratio"], 3),
+                     "dead_time_bare": _r(bare.counts[-1]["dead_time"], 3)},
+        "reference": {"thermal_flux_per_kw": _r(th, -1), "epithermal_flux_per_kw": _r(epi, -1), "cadmium_ratio": _r(true_cr, 3)},
+        "error": {"thermal_percent": _r(100 * (f["thermal_per_kw"] - th) / th, 2),
+                  "epithermal_percent": _r(100 * (f["epithermal_per_kw"] - epi) / epi, 2)},
+        "notes": [f"10 mg gold foils, {minutes:g} min at {power_w:g} W in {position}; counted 300 s at 25 cm."],
+    }
+    return bench.sim, result
+
+
+def activation_analysis(seed: int | None = 1, material: str = "unknown_ore", unknown_seed: int = 0,
+                        power_w: float = 10_000.0, minutes: float = 30.0):
+    """Neutron activation analysis of an unknown: element identification and concentrations (absolute
+    method) from gamma spectra, with the flux measured by gold foils at the same position."""
+    bench = _LabBench(seed, power_w, unknown_seed)
+    _flux_pair(bench, "core_center", 600, shelf_cm=50.0, live_s=120.0)
+    smp = bench.lab.prepare(material)
+    bench.irradiate([smp], "core_center", minutes * 60)
+    bench.run(120)
+    bench.count(smp, 900, shelf_cm=25.0)   # short-lived products (Al-28, Cl-38, Mn-56)
+    bench.run(12 * 3600, step=60.0)
+    bench.count(smp, 3600, shelf_cm=10.0)  # long-lived ones once the short ones are gone (Na-24, K-42, Fe-59)
+    masses = bench.lab.results(bench.t)["analyses"][smp.id].get("element_masses_g", {})
+    rows = []
+    for el, frac in sorted(smp.composition.items(), key=lambda kv: -kv[1]):
+        m = masses.get(el)
+        rows.append([el, _r(frac * 1e6, 1), None if m is None else _r(m / smp.mass_g * 1e6, 1),
+                     None if m is None else _r(100 * (m / smp.mass_g - frac) / frac, 1)])
+    found = [r for r in rows if r[2] is not None]
+    result = {
+        "measured": {"elements_found": [r[0] for r in found],
+                     "worst_error_percent": _r(max(abs(r[3]) for r in found), 2) if found else None},
+        "reference": {"elements_present": [r[0] for r in rows]},
+        "table": {"columns": ["element", "true_ppm", "measured_ppm", "error_percent"], "rows": rows},
+        "notes": [f"{smp.mass_g * 1000:g} mg {smp.name}, {minutes:g} min at {power_w:g} W in the centre position.",
+                  "Counted 15 min at 25 cm after 2 min, then 1 h at 10 cm after 12 h.",
+                  "Si, O and Zn make no usable gamma emitters, so NAA does not see them."],
+    }
+    return bench.sim, result
+
+
+def half_life(seed: int | None = 1, material: str = "indium_foil", counts: int = 6, live_s: float = 300.0,
+              gap_s: float = 300.0, power_w: float = 100.0, minutes: float = 5.0):
+    """Half-life from repeated counts of a short-lived activation product."""
+    from reactorsim.materials import REACTIONS
+    bench = _LabBench(seed, power_w)
+    smp = bench.lab.prepare(material)
+    bench.irradiate([smp], "core_center", minutes * 60)
+    bench.run(60)
+    rows = []
+    for _ in range(counts):
+        res = bench.count(smp, live_s, shelf_cm=10.0)
+        pk = max(res["peaks"], key=lambda p: p["net"])
+        rows.append([_r(res["start_t"] - smp.time_out, 1), pk["nuclide"], _r(pk["net"], 0), _r(res["dead_time"], 3)])
+        bench.run(gap_s)
+    product = rows[0][1]
+    hl = bench.lab.half_life(smp, product)
+    ref = REACTIONS[product][1].half_life_s
+    result = {
+        "measured": {"nuclide": product, "half_life_s": _r(hl["half_life_s"], 1)},
+        "reference": {"half_life_s": ref},
+        "error": {"percent": _r(100 * (hl["half_life_s"] - ref) / ref, 2)},
+        "table": {"columns": ["since_eoi_s", "nuclide", "net_counts", "dead_time"], "rows": rows},
+        "notes": [f"{smp.name}, {minutes:g} min at {power_w:g} W; {counts} counts of {live_s:g} s."],
+    }
+    return bench.sim, result
+
+
+def silicon_doping(seed: int | None = 1, target_ohm_cm: float = 2000.0, power_w: float = 10_000.0):
+    """Neutron transmutation doping: irradiate a float-zone silicon wafer to a target resistivity using
+    the measured flux, then check it against the phosphorus actually made."""
+    from reactorsim.materials import MaterialsLab
+    bench = _LabBench(seed, power_w)
+    _flux_pair(bench, "core_center", 600, shelf_cm=50.0, live_s=120.0)
+    f = bench.lab.results(bench.t)["flux"]["core_center"]
+    probe = MaterialsLab.ntd(None, 1.0)
+    n0 = 1.0 / (1.602e-19 * 1350.0 * probe["initial_resistivity_ohm_cm"])
+    donors_needed = 1.0 / (1.602e-19 * 1350.0 * target_ohm_cm) - n0
+    per_fluence = probe["phosphorus_per_cm3"]
+    seconds = donors_needed / per_fluence / (f["thermal_per_kw"] * power_w / 1000)
+    wafer = bench.lab.prepare("silicon_wafer")
+    bench.irradiate([wafer], "core_center", seconds)
+    predicted = bench.lab.results(bench.t)["ntd"][wafer.id]["resistivity_ohm_cm"]
+    actual = MaterialsLab.ntd(wafer, wafer.fluence_thermal)["resistivity_ohm_cm"]
+    result = {
+        "measured": {"irradiation_h": _r(seconds / 3600, 3), "predicted_resistivity_ohm_cm": _r(predicted, 1)},
+        "reference": {"target_ohm_cm": target_ohm_cm, "actual_resistivity_ohm_cm": _r(actual, 1)},
+        "error": {"percent_from_target": _r(100 * (actual - target_ohm_cm) / target_ohm_cm, 2)},
+        "notes": ["Irradiation time from the gold-foil flux; the actual resistivity uses the wafer's true fluence."],
+    }
+    return bench.sim, result
+
+
+def radiation_damage(seed: int | None = 1, power_w: float = 10_000.0, hours: float = 1.0, cool_h: float = 8.0):
+    """Fast flux from Ni-58(n,p)Co-58 in a steel coupon, displacement damage (dpa) and the activation of the steel."""
+    bench = _LabBench(seed, power_w)
+    smp = bench.lab.prepare("steel_304")
+    bench.irradiate([smp], "core_center", hours * 3600)
+    dose_out = smp.dose_rate_mr_h()
+    bench.run(cool_h * 3600, step=60.0)
+    res = bench.count(smp, 3600, shelf_cm=10.0)
+    dmg = bench.lab.results(bench.t)["damage"][smp.id]
+    true_fast = bench.lab.flux("core_center", power_w)[2]
+    result = {
+        "measured": {"fast_flux": _r(dmg["fast_flux"], -1), "dpa": dmg["dpa"], "hardening_mpa": _r(dmg["hardening_mpa"], 3),
+                     "dose_at_removal_mr_h_30cm": _r(dose_out, 2), "nuclides": sorted({p["nuclide"] for p in res["peaks"]})},
+        "reference": {"fast_flux": _r(true_fast, -1), "dpa": bench.lab.damage(smp.fluence_fast)["dpa"]},
+        "error": {"fast_flux_percent": _r(100 * (dmg["fast_flux"] - true_fast) / true_fast, 2)},
+        "notes": [f"{hours:g} h at {power_w:g} W in the centre position, {cool_h:g} h cooling, 1 h count at 10 cm."],
+    }
+    return bench.sim, result
+
+
 EXPERIMENTS: dict[str, Experiment] = {e.key: e for e in [
     Experiment("approach_to_critical", "Approach to critical (1/M)",
                "Predict the critical shim bank height from the source multiplication.",
@@ -737,4 +915,15 @@ EXPERIMENTS: dict[str, Experiment] = {e.key: e for e in [
     Experiment("power_calibration", "Calorimetric power calibration",
                "Calibrate the power channels against the pool heat-up rate.",
                power_calibration, _plot_power_cal),
+    Experiment("foil_activation", "Neutron flux and cadmium ratio (gold foils)",
+               "Measure thermal and epithermal flux with bare and cadmium-covered gold foils.", foil_activation),
+    Experiment("activation_analysis", "Neutron activation analysis of an unknown",
+               "Identify and quantify the elements in an unknown sample from its gamma spectrum.",
+               activation_analysis),
+    Experiment("half_life", "Half-life measurement",
+               "Fit the decay of In-116m over repeated counts.", half_life),
+    Experiment("silicon_doping", "Silicon neutron transmutation doping",
+               "Dope a silicon wafer to 2000 ohm-cm with thermal neutrons.", silicon_doping),
+    Experiment("radiation_damage", "Radiation damage and activation of steel",
+               "Measure fast flux with Ni-58(n,p)Co-58 and work out the displacement damage.", radiation_damage),
 ]}

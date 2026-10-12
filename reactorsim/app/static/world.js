@@ -42,7 +42,7 @@ const LABELS = {
   Cabinet_2_Mirion_NI_Channels: ["info", null, "Cabinet 2: Mirion nuclear instrument channels"],
   Cabinet_3_Historian_DataDiode: ["info", null, "Cabinet 3: historian, data diode and network"],
   Cabinet_4_UPS_30min: ["info", null, "Cabinet 4: UPS, 30 minutes"],
-  DiagBench_Top: ["info", null, "Diagnostics bench: data analysis and training workstations"],
+  DiagBench_Top: ["station", "lab", "Materials lab: sample irradiation and gamma spectrometry"],
   DiagBench_Rack: ["info", null, "Portable diagnostics rack"],
   Whiteboard: ["info", null, "Whiteboard: today's operations plan"],
   Stair_North: ["info", null, "Stair to the north platform"],
@@ -75,8 +75,8 @@ const LABELS = {
   Door_Main_East: ["info", null, "Main door to the corridor (the hallway scram button is beside it)"],
   Door_StorageRoom_West: ["info", null, "Storage room"],
   Door_Platform_North: ["info", null, "Upper-level door from the platform"],
-  LabTable_1_Top: ["info", null, "Adjacent lab: lab table"],
-  LabTable_2_Top: ["info", null, "Adjacent lab: lab table"],
+  LabTable_1_Top: ["station", "lab", "Materials lab: sample irradiation and gamma spectrometry"],
+  LabTable_2_Top: ["station", "lab", "Materials lab: sample irradiation and gamma spectrometry"],
 };
 // The parts of each keyboard, mouse and trackball work like the device itself.
 for (const [part, of] of [["Keyboard_Keys", "Keyboard"], ["Trackball_Ball", "Trackball"],
