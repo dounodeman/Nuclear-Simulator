@@ -33,7 +33,8 @@ Simulator Parameter Sheet (SAR 2008/2015, Technical Specifications, digital twin
 pip install -e .[dev]
 python -m reactorsim list
 python -m reactorsim run startup --plot startup.png
-python -m pytest            # 32 validation tests
+python -m reactorsim experiments
+python -m pytest            # validation tests
 ```
 
 ```python
@@ -45,6 +46,64 @@ sim.set_servo(True, 10_000)
 sim.insert_reactivity(0.003)             # an experiment at the tech-spec limit
 sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
+```
+
+## Reactor physics experiments
+
+The classic research-reactor lab measurements, run on the simulated PUR-1 the way a student
+crew would run them at the console. Each one uses only what the instruments show (count rates,
+log and linear power, rod positions, pool temperature, all with their noise) and reports the
+measured value next to the value built into the model, so the technique itself can be judged.
+
+| Experiment | Method | Typical result (seed 1) |
+| --- | --- | --- |
+| `approach_to_critical` | 1/M plot with the source in, shims withdrawn as a bank, each step at most halfway to the prediction | Critical bank 55.98 cm against 56.11 cm |
+| `rod_calibration` | Positive period: step the regulating rod, fit the stable period, inhour equation, return to power with a shim | RR worth $0.347 against $0.344 (+0.6%) |
+| `rod_drop` | Drop SS2 alone; inverse kinetics, integral count and prompt jump; rod-bottom time | $2.735 by inverse kinetics; integral count 5% low, prompt jump 29% high; drop 0.56 s |
+| `sample_worth` | Servo holds 1 W while an absorber sample goes in; worth from the RR curve | -$0.0998 against -$0.100 |
+| `temperature_coefficient` | Servo finds the critical RR position at four pool temperatures | -1.256 cents/C against -1.257 |
+| `power_calibration` | Pool heat-up rate with the chiller off, less the shut-down drift, times the pool's heat capacity | 9.90 kW against 9.91 kW thermal; catches miscalibrated channels |
+
+```bash
+python -m reactorsim experiment rod_calibration --plot rr.png --json rr.json
+python -m reactorsim experiment power_calibration --no-noise
+```
+
+```python
+from reactorsim.experiments import EXPERIMENTS
+
+sim, cal = EXPERIMENTS["rod_calibration"].run()
+sim, s = EXPERIMENTS["sample_worth"].run(sample_dollars=-0.2, calibration=cal["integral_curve"])
+```
+
+The analysis tools (`fit_period`, `inhour_reactivity`, `inverse_kinetics`) are in
+`reactorsim/experiments.py` for building new experiments.
+
+## Materials science lab
+
+The adjoining lab (the diagnostics bench and the lab tables in the hall, or **Materials lab** in
+the menu) is a working irradiation facility. Prepare samples, lower them into the in-core centre,
+core edge, reflector or pool positions, run the reactor, then pull them out and count them on the
+HPGe gamma spectrometer. Every sample is worth a little negative reactivity while it is in, so the
+console feels it.
+
+The physics is modelled from the ground up: (n,gamma) capture with thermal cross sections and
+resonance integrals, fast (n,p) threshold reactions, exact build-up and decay of each product,
+a 4096-channel detector with real efficiency, resolution, Compton continuum, room background,
+dead time and counting statistics. The analysis software does a peak search, identifies
+nuclides from their lines and works back to the activity at the end of irradiation. The screen
+walks through five guided experiments:
+
+| Experiment | What you do | Typical result (seed 1) |
+| --- | --- | --- |
+| `foil_activation` | Bare and cadmium-covered gold foils give thermal and epithermal flux and the cadmium ratio | 2.208e10 n/cm2-s per kW, within 0.1% |
+| `activation_analysis` | Identify and quantify the elements in an unknown sample (absolute-method NAA) | Al, Na, K, Cl, Mn found, all within 5% |
+| `half_life` | Repeated counts of an indium foil, fit the decay of In-116m | 3263 s against 3257 s |
+| `silicon_doping` | Neutron transmutation doping of a silicon wafer to a target resistivity | 1992 ohm-cm against a 2000 target |
+| `radiation_damage` | Fast flux from Ni-58(n,p)Co-58 in stainless steel, displacements per atom and hardening | Fast flux within 0.4% |
+
+```bash
+python -m reactorsim experiment activation_analysis
 ```
 
 ## Control room (Mac app)
@@ -68,7 +127,8 @@ The workstations, the menu and every other window look like the plant's own late
 navy title bars, etched group boxes and white value fields.
 
 - **Workstation 1, reactor control** (left-hand monitor): the four neutron channels, rod
-  drives you hold to move, linear-channel ranging, the servo, the startup source, scram and
+  drives you hold to move or send to a set point (type a position in cm and press Go; the drive
+  runs there and stops, one rod withdrawing at a time), linear-channel ranging, the servo, the startup source, scram and
   reset, and the annunciators.
 - **Workstation 2, plant data** (right-hand monitor): the power history, a core camera, pool and
   radiation readings, reactivity and the event log.
@@ -81,7 +141,9 @@ navy title bars, etched group boxes and white value fields.
 
 ![The hard-wired panel on the console](docs/img/console_panel.png)
 
-The monitors, rod position readouts and annunciator lamps show the live plant, and the blades
+The monitors in the hall are copies of the two workstation screens, so whatever is entered at a
+workstation (rod set points, the servo set point, the linear range, the source, the trend window)
+shows on them too. The monitors, rod position readouts and annunciator lamps show the live plant, and the blades
 in the core move with the rods. The video wall is laid out like the real one: power and
 temperature trends down the left over a white plant schematic, a live underwater camera on the
 core across the middle, and the reactor status, a hall camera and the radiation monitors down
@@ -174,6 +236,8 @@ reactorsim/
   reactors/    one module per reactor design (pur1.py)
   simulator.py the control loop and operator actions
   scenarios.py scripted operations and accidents
+  experiments.py reactor physics and materials lab experiments and their analysis tools
+  materials.py   materials lab: activation, sample positions, HPGe detector and analysis
   app/         control room: live session, local server, web page, updater
 packaging/     Mac app build (PyInstaller)
 tests/         validation tests

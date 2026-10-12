@@ -4,6 +4,7 @@
 import { ReactorView } from "./view3d.js";
 import { HallWorld } from "./world.js";
 import { startMenuBackground } from "./menubg.js";
+import { initLab, renderLab } from "./lab.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -16,9 +17,10 @@ let trend = [];          // [t, power_w, ch2_pct, ch4_pct, peak_fuel_c, pool_c]
 let trendWindow = 600;
 let view = null;          // core camera on the plant workstation
 let world = null;         // the walkable hall
-let station = null;       // open workstation: "reactor", "plant" or null
+let station = null;       // open workstation: "reactor", "plant", "lab" or null
 let menuBg = null;        // the main menu's animated background, until the hall is entered
 const ann = {};           // annunciator states, shared with the hall's lamps
+let recentEvents = [];    // newest last, for the event log mirrored on the hall's plant monitor
 
 // ------------------------------------------------------------------ API
 
@@ -164,6 +166,8 @@ function buildStatic() {
     drawTrend();
   });
   $("#instructorToggle").addEventListener("click", () => toggleDrawer());
+  $("#labBtn").addEventListener("click", () => openStation("lab"));
+  initLab(cmd);
   $("#closeInstructor").addEventListener("click", () => toggleDrawer(false));
   buildInstructor();
 
@@ -214,15 +218,19 @@ function buildInstructor() {
 
 function buildRods() {
   const reg = state.regulating_rod;
-  $("#rods").innerHTML = Object.keys(state.rods).map((name) => `
+  $("#rods").innerHTML = Object.entries(state.rods).map(([name, r]) => `
     <div class="rod ${name === reg ? "rr" : "ss"}" data-rod="${name}">
       <div class="rod-name">${name}</div>
-      <div class="rod-col"><div class="core-zone"></div><div class="blade"></div><div class="drive"></div></div>
+      <div class="rod-col"><div class="core-zone"></div><div class="blade"></div><div class="sp-mark"></div><div class="drive"></div></div>
       <div class="rod-pos digits">-</div>
       <div class="rod-state"></div>
       <div class="rod-btns">
         <button data-dir="in" title="Hold to drive in">IN ▼</button>
         <button data-dir="out" title="Hold to drive out">OUT ▲</button>
+      </div>
+      <div class="rod-sp" title="Set point: the drive runs in or out to this position and stops">
+        <input type="number" data-sp step="0.1" min="0" max="${r.travel_cm}" placeholder="cm" aria-label="${name} set point, cm">
+        <button data-go>Go</button>
       </div>
       <div class="rod-worth"></div>
     </div>`).join("");
@@ -253,6 +261,15 @@ function buildRods() {
       b.addEventListener("pointercancel", stop);
       b.addEventListener("lostpointercapture", stop);
     });
+    // Set point: type a position in cm and press Go or Enter; the drive runs there and stops.
+    const sp = $("[data-sp]", el);
+    const go = () => {
+      if (sp.value.trim() === "") return;
+      cmd("drive_to", { rod: name, position_cm: +sp.value });
+      sp.blur();
+    };
+    $("[data-go]", el).addEventListener("click", go);
+    sp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
   });
 
   $("#rodFaults").innerHTML = Object.keys(state.rods).map((name) => `
@@ -281,6 +298,7 @@ function resetBuffers() {
   trend = [];
   trendAfter = -1;
   eventsAfter = 0;
+  recentEvents = [];
   $("#events").innerHTML = "";
 }
 
@@ -341,9 +359,9 @@ async function openStation(name) {
   world?.setActive(false);
   $("#menu").hidden = true;
   $("#prompt").hidden = true;
-  $("#station-reactor").hidden = name !== "reactor";
-  $("#station-plant").hidden = name !== "plant";
+  $$(".station").forEach((el) => { el.hidden = el.id !== `station-${name}`; });
   document.body.classList.add("at-station");
+  if (name === "lab") poll();
   if (name === "plant") {
     drawTrend();
     if (!view && info.models) {
@@ -361,8 +379,7 @@ async function openStation(name) {
 function closeStation() {
   if (!station) return;
   station = null;
-  $("#station-reactor").hidden = true;
-  $("#station-plant").hidden = true;
+  $$(".station").forEach((el) => { el.hidden = true; });
   document.body.classList.remove("at-station");
   if (world) {
     world.setActive(true);
@@ -449,13 +466,21 @@ function render() {
     else if (r.stuck) [label, cls] = ["stuck", "bad"];
     else if (r.falling) [label, cls] = ["dropping", "bad"];
     else if (!r.latched) [label, cls] = ["unlatched · drive in", "bad"];
+    else if (r.waiting) [label, cls] = ["waiting: one rod at a time", "moving"];
+    else if (r.target_cm !== null) [label, cls] = [`to set point ${r.target_cm.toFixed(1)} cm`, "moving"];
     else if (r.moving) [label, cls] = [r.command > 0 ? "withdrawing" : r.command < 0 ? "inserting" : "moving", "moving"];
     else if (name === s.regulating_rod && s.servo.enabled) [label, cls] = ["on servo", "moving"];
+    else if (r.setpoint_cm !== null) [label, cls] = ["at set point", ""];
     st.textContent = label;
     st.className = `rod-state ${cls}`;
+    const mark = $(".sp-mark", el);
+    mark.hidden = r.setpoint_cm === null;
+    if (r.setpoint_cm !== null) mark.style.bottom = `${(r.setpoint_cm / r.travel_cm) * 100}%`;
+    const sp = $("[data-sp]", el);
+    if (document.activeElement !== sp && r.setpoint_cm !== null) sp.value = r.setpoint_cm.toFixed(1);
     $(".rod-worth", el).textContent = `holds −$${r.worth_dollars.toFixed(2)}`;
     const servoOwned = name === s.regulating_rod && s.servo.enabled;
-    $$("[data-dir]", el).forEach((b) => (b.disabled = servoOwned));
+    $$("[data-dir], [data-sp], [data-go]", el).forEach((b) => (b.disabled = servoOwned));
   }
 
   // Servo / source / scram
@@ -540,8 +565,9 @@ function render() {
     if (sel && document.activeElement !== sel) sel.value = r.runaway ? "runaway" : r.stuck ? "stuck" : "none";
   }
 
+  renderLab(s, station === "lab");
   view?.update(s);
-  world?.update(s, trend, ann);
+  world?.update(s, trend, ann, { trendWindow, events: recentEvents, truth, servoSetpointW: +$("#setpoint").value });
   $("#speedTag").textContent = s.speed === 0 ? "paused" : `${s.speed}×`;
   $("#speedTag").classList.toggle("paused", s.speed === 0);
 }
@@ -555,7 +581,9 @@ function appendEvents(events) {
     $(".kind", li).textContent = e.kind;
     $(".m", li).textContent = e.message;
     ol.prepend(li);
+    recentEvents.push(e);
   }
+  if (recentEvents.length > 20) recentEvents = recentEvents.slice(-20);
   while (ol.children.length > 500) ol.lastChild.remove();
 }
 
@@ -651,7 +679,7 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    const s = await api(`/api/state?events_after=${eventsAfter}&trend_after=${trendAfter}`);
+    const s = await api(`/api/state?events_after=${eventsAfter}&trend_after=${trendAfter}${station === "lab" ? "&lab=1" : ""}`);
     if (state && s.run !== state.run) {
       // The session was restarted. This reply was asked for with the old run's counters, so
       // it may be missing the new run's first events: start clean and fetch again.

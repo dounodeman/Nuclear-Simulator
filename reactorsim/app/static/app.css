@@ -189,6 +189,11 @@ body:not(.truth) .truth { display: none; }
 .rod-btns button { padding: 6px 10px; font-weight: 600; touch-action: none; }
 .rod-btns button.held { background: #12324a; border-color: var(--accent); }
 .rod-worth { font: 11px var(--mono); color: var(--dim); }
+.rod-col .sp-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed var(--accent); z-index: 1; }
+.rod-col .sp-mark[hidden] { display: none; }
+.rod-sp { display: flex; gap: 2px; align-items: center; }
+.rod-sp input[type=number] { width: 58px; }
+.rod-sp button { padding: 2px 6px; }
 .row-ctl { display: flex; justify-content: center; margin-top: 10px; }
 .sub-panel { border-top: 1px solid var(--line); margin-top: 12px; }
 .servo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -546,3 +551,55 @@ fieldset.group legend { padding: 0 3px; color: var(--hmi-navy); font-weight: bol
   padding: 1px 8px; border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow);
 }
 .station .hmi-status span:first-child { flex: 1; }
+
+/* ---------- materials lab workstation ---------- */
+.station-grid.lab {
+  grid-template-columns: minmax(420px, 1.35fr) minmax(300px, 1fr);
+  grid-template-areas: "samples core" "det guides";
+}
+.lab-samples { grid-area: samples; }
+.lab-core { grid-area: core; }
+.lab-det { grid-area: det; display: flex; flex-direction: column; gap: 6px; }
+.lab-guides { grid-area: guides; }
+@media (max-width: 1000px) {
+  .station-grid.lab { grid-template-columns: 1fr; grid-template-areas: "samples" "core" "det" "guides"; }
+}
+.lab-prep { flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.lab-prep select { min-width: 200px; }
+.lab-scroll { max-height: 230px; overflow-y: auto; background: var(--hmi-field);
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow); }
+.lab-table { width: 100%; border-collapse: collapse; font: 11px var(--hmi-font); background: var(--hmi-field); }
+.lab-table th { text-align: left; font-weight: bold; background: var(--hmi-face); padding: 2px 4px;
+  border-right: 1px solid var(--hmi-shadow); border-bottom: 1px solid var(--hmi-shadow); position: sticky; top: 0; }
+.lab-table td { padding: 2px 4px; border-bottom: 1px solid #e6e3da; white-space: nowrap; }
+.lab-table td.num { font-family: var(--hmi-mono); text-align: right; }
+.lab-table td.hot, .lab-readouts .hot { color: var(--hmi-amber); color: #b06000; font-weight: bold; }
+.lab-readouts .alarm { color: var(--hmi-red); }
+.lab-table td.ok { color: var(--hmi-green); font-weight: bold; }
+.lab-table .acts { display: flex; gap: 2px; align-items: center; }
+.lab-table .acts button { padding: 1px 6px; font-size: 11px; }
+.lab-table .acts select { font-size: 11px; max-width: 150px; }
+.lab-positions { display: grid; gap: 6px; margin-bottom: 8px; }
+.lab-pos { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; }
+.lab-pos-name { font-weight: bold; color: var(--hmi-navy); }
+.lab-pos-slots { display: flex; gap: 3px; }
+.lab-pos-slots .slot { width: 26px; height: 22px; display: grid; place-items: center; font: bold 11px var(--hmi-mono);
+  background: var(--hmi-field); border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow); }
+.lab-pos-slots .slot.full { background: #c3d7f0; color: var(--hmi-navy); }
+.lab-pos-flux { grid-column: 1 / -1; font: 10px var(--hmi-mono); color: #0030c0; }
+.lab-kv { margin: 6px 0; }
+.lab-readouts { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--hmi-label); }
+.lab-readouts b { color: #000; font-weight: normal; }
+.lab-spectrum { width: 100%; height: 230px; display: block;
+  border: 1px solid; border-color: var(--hmi-shadow) var(--hmi-light) var(--hmi-light) var(--hmi-shadow); }
+.guide { border-bottom: 1px solid var(--hmi-shadow); }
+.guide-head { width: 100%; display: flex; justify-content: space-between; text-align: left; font-weight: bold; margin: 2px 0; }
+.guide-prog { font-family: var(--hmi-mono); color: var(--hmi-label); }
+.guide-prog.ok { color: var(--hmi-green); }
+.guide-body { padding: 4px 4px 8px; font-size: 11px; }
+.guide-body p { margin: 0 0 6px; }
+.guide-body h4 { margin: 8px 0 2px; font-size: 11px; color: var(--hmi-navy); }
+.steps { margin: 0 0 6px; padding-left: 20px; }
+.steps li { margin: 2px 0; }
+.steps li.done { color: var(--hmi-green); }
+.steps li.done::marker { content: "✓ "; }

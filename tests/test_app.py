@@ -40,8 +40,47 @@ def test_servo_owns_the_regulating_rod():
     s = SimSession("power_10kw", seed=1)
     with pytest.raises(CommandError):
         s.command("drive", rod="RR", direction="out")
+    with pytest.raises(CommandError):
+        s.command("drive_to", rod="RR", position_cm=20.0)
     s.advance(30.0)
     assert s.state()["true"]["power_w"] == pytest.approx(10_000, rel=0.02)
+
+
+def test_rod_set_points_drive_one_rod_at_a_time():
+    s = SimSession("cold", seed=1)
+    s.command("drive_to", rod="SS1", position_cm=3.0)
+    s.command("drive_to", rod="SS2", position_cm=2.0)
+    s.advance(5.0)
+    st = s.state()["rods"]
+    assert st["SS1"]["moving"] and st["SS1"]["setpoint_cm"] == 3.0
+    assert st["SS2"]["waiting"] and st["SS2"]["position_cm"] == 0.0  # one rod withdraws at a time
+    s.advance(40.0)
+    st = s.state()["rods"]
+    assert st["SS1"]["position_cm"] == pytest.approx(3.0)
+    assert st["SS2"]["position_cm"] == pytest.approx(2.0)
+    assert st["SS1"]["setpoint_cm"] == 3.0 and st["SS1"]["target_cm"] is None and not st["SS1"]["moving"]
+    s.command("drive_to", rod="SS1", position_cm=1.0)   # set points also drive in
+    s.advance(15.0)
+    assert s.state()["rods"]["SS1"]["position_cm"] == pytest.approx(1.0)
+    s.command("drive", rod="SS1", direction="stop")      # manual drive cancels the set point
+    assert s.state()["rods"]["SS1"]["setpoint_cm"] is None
+    with pytest.raises(CommandError):
+        s.command("drive_to", rod="SS1", position_cm="lots")
+
+
+def test_rod_set_point_is_cancelled_by_a_scram():
+    s = SimSession("cold", seed=1)
+    s.command("drive_to", rod="SS1", position_cm=10.0)
+    s.advance(3.0)
+    s.command("scram")
+    s.advance(1.0)
+    st = s.state()
+    assert st["rods"]["SS1"]["setpoint_cm"] is None and not st["rods"]["SS1"]["moving"]
+    s.command("drive_to", rod="SS2", position_cm=5.0)   # withdrawal is blocked while scrammed
+    s.advance(2.0)
+    st = s.state()
+    assert st["rods"]["SS2"]["position_cm"] == 0.0 and st["rods"]["SS2"]["setpoint_cm"] is None
+    assert any("SS2 set point cancelled" in e["message"] for e in st["events"])
 
 
 def test_instructor_experiment_and_bad_commands():
@@ -70,7 +109,11 @@ def test_restart_puts_everything_back(initial):
     s.command("channel_fault", channel="ch3", mode="stuck")
     s.command("protection", enabled=False, failed_trips=["period"])
     s.command("experiment", dollars=0.3, ramp_s=5)
+    s.command("drive_to", rod="SS2", position_cm=5.0)
+    sid = s.command("lab_prepare", material="gold_foil")["sample"]
+    s.command("lab_insert", sample=sid, position="core_center")
     s.advance(300.0)
+    assert s.state()["lab"]["samples"] and s.state()["rods"]["SS2"]["setpoint_cm"] is not None
     s.command("reset", initial=initial)
     after, want = s.state(), fresh.state()
     assert after["run"] == run + 1

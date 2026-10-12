@@ -261,10 +261,10 @@ class Simulator:
         setback_rods = list(d.shim_rods) + ([d.regulating_rod] if d.setback_drives_all_rods else [])
         if setback:
             for name in setback_rods:
-                self.rods[name].target = None
+                self._cancel_setpoint(name)
                 self.rods[name].command = -1
             if not d.setback_drives_all_rods:
-                self.rods[d.regulating_rod].target = None
+                self._cancel_setpoint(d.regulating_rod)
                 self.rods[d.regulating_rod].command = 0
 
         if self.setback_active and not setback:
@@ -282,7 +282,7 @@ class Simulator:
         reg = self.rods[d.regulating_rod]
         if self.servo.enabled and not self.scrammed:
             log_rate = 0.0 if not math.isfinite(r.ch2_period) else 1.0 / r.ch2_period
-            reg.target = None
+            self._cancel_setpoint(d.regulating_rod)
             reg.command = self.servo.command(r.ch3_power_w, log_rate)
             if reg.command == 1 and reg.drive_position >= reg.spec.length_cm - 1e-6:
                 self._alarm_once("Regulating rod at upper limit")
@@ -293,19 +293,27 @@ class Simulator:
         blocked = bool(out.interlock_causes) or self.scrammed
         withdrawing: list[str] = []
         for name, rod in self.rods.items():
-            wants_out = rod.command == 1 or (rod.target is not None and rod.target > rod.drive_position)
+            rod.hold = False
+            to_setpoint = rod.command == 0 and rod.target is not None and rod.target > rod.drive_position
+            wants_out = rod.command == 1 or to_setpoint
             if not wants_out:
                 continue
             if d.one_rod_withdrawal and withdrawing:
-                rod.command = 0
-                rod.target = None
+                if to_setpoint:
+                    rod.hold = True  # a rod going to its set point waits its turn
+                else:
+                    rod.command = 0
                 continue
             withdrawing.append(name)
             shim_limit = (name in d.shim_rods and not out.channels_operable
                           and rod.drive_position >= d.protection.shim_interlock_height_cm)
             if blocked or shim_limit:
                 rod.command = 0
-                rod.target = None
+                if rod.target is not None:
+                    why = "; ".join(out.interlock_causes) or ("scram in effect" if self.scrammed
+                                                              else "channels inoperable")
+                    self._event("operator", f"{name} set point cancelled: {why}")
+                self._cancel_setpoint(name)
 
         if self.auto_range:
             indicated = r.ch3_power_w if r.ch3_percent_of_range < 100 else r.ch2_percent * d.rated_power / 100
@@ -359,20 +367,28 @@ class Simulator:
     # ------------------------------------------------------------------ operator actions
 
     def drive(self, rod: str, direction: str) -> None:
-        """Hold a rod drive switch: 'out', 'in' or 'stop'."""
+        """Hold a rod drive switch: 'out', 'in' or 'stop'. Manual drive cancels a set point."""
         r = self.rods[rod]
-        r.target = None
+        self._cancel_setpoint(rod)
         r.command = {"out": 1, "in": -1, "stop": 0}[direction]
 
     def drive_to(self, rod: str, position_cm: float) -> None:
+        """Set a rod position set point: the drive runs in or out to it and stops there."""
         r = self.rods[rod]
         r.command = 0
         r.target = min(max(position_cm, 0.0), r.spec.length_cm)
+        r.setpoint = r.target
+
+    def _cancel_setpoint(self, rod: str) -> None:
+        r = self.rods[rod]
+        r.target = None
+        r.setpoint = None
+        r.hold = False
 
     def stop_all(self) -> None:
-        for r in self.rods.values():
+        for name, r in self.rods.items():
             r.command = 0
-            r.target = None
+            self._cancel_setpoint(name)
 
     def scram(self, cause: str | list[str] = "Manual scram") -> None:
         causes = [cause] if isinstance(cause, str) else list(cause)
@@ -382,8 +398,8 @@ class Simulator:
         self.scrammed = True
         self.scram_causes = causes
         self.servo.enabled = False
-        for r in self.rods.values():
-            r.target = None
+        for name, r in self.rods.items():
+            self._cancel_setpoint(name)
             r.command = 0
             if r.spec.scrammable:
                 r.magnet_power = False  # blocks re-latching while the scram is in effect
@@ -394,6 +410,25 @@ class Simulator:
                 self._pending_release = self.t + self.design.scram_delay_s
             else:
                 self._release_rods()
+
+    def drop_rod(self, rod: str) -> None:
+        """Rod-drop test: cut one rod's magnet current so that rod falls alone while the others
+        stay latched. ``relatch_rod`` restores the magnet so the drive can pick the rod up again."""
+        r = self.rods[rod]
+        if not r.spec.scrammable:
+            raise ValueError(f"{rod} has no magnet and cannot be dropped")
+        r.target = None
+        r.command = 0
+        r.release()
+        self._event("operator", f"{rod} magnet de-energized (rod drop)")
+
+    def relatch_rod(self, rod: str) -> None:
+        """Re-energize a dropped rod's magnet and run its drive down to pick the rod up."""
+        r = self.rods[rod]
+        if self.scrammed:
+            return
+        r.magnet_power = True
+        self.drive_to(rod, 0.0)
 
     def reset_scram(self) -> bool:
         """Clear a scram if no trip condition remains. Drives must then be run in to re-latch."""
