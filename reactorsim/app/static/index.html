@@ -48,6 +48,7 @@
       </fieldset>
       <button id="truthToggle" class="toggle" aria-pressed="false" title="Show true plant values next to the instruments">True values</button>
       <button id="instructorToggle" class="toggle" aria-pressed="false">Instructor station</button>
+      <button id="labBtn" title="Sample irradiation, gamma spectrometry and materials experiments">Materials lab</button>
       <button id="fullscreenBtn" title="Full screen (F)">Full screen</button>
       <button id="updateBtn" title="Updates">Updates</button>
     </div>
@@ -163,6 +164,66 @@
       </section>
     </div>
     <div class="hmi-status"><span data-status="msg">Ready</span><span>Historian</span><span data-status="clock">--:--:--</span></div>
+  </div>
+</section>
+
+<!-- Materials lab: sample irradiation, HPGe gamma spectrometry and guided experiments -->
+<section class="station" id="station-lab" hidden aria-label="Materials lab workstation">
+  <div class="monitor">
+    <div class="monitor-head">
+      <span>PUR-1 Materials Lab - Irradiation and Gamma Spectrometry</span>
+      <button class="ghost" data-close>Step away (Esc)</button>
+    </div>
+    <div class="station-grid lab">
+      <section class="panel lab-samples">
+        <h2>Samples</h2>
+        <div class="form-row lab-prep">
+          <select id="labMaterial" aria-label="Material"></select>
+          <label>Mass <input id="labMass" type="number" min="0.01" step="any"> mg</label>
+          <label class="check"><input type="checkbox" id="labCadmium"> Cadmium cover</label>
+          <button id="labPrepare">Prepare</button>
+        </div>
+        <div class="lab-scroll">
+          <table class="lab-table">
+            <thead><tr><th>#</th><th>Sample</th><th>Mass</th><th>Where</th><th>Time</th><th>Survey 30 cm</th><th class="truth">True activity</th><th></th></tr></thead>
+            <tbody id="labSamples"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel lab-core">
+        <h2>Irradiation positions</h2>
+        <div id="labPositions" class="lab-positions"></div>
+        <div class="kv lab-kv">
+          <span class="k">Reactor power (Ch3)</span><span class="v" id="labPower">-</span>
+          <span class="k">Samples' reactivity</span><span class="v" id="labWorth">-</span>
+        </div>
+        <p class="hint">Samples go in and out at any power; each one's reactivity worth goes into the core as it is lowered in.
+          A movable experiment must stay under the 0.003 dk/k (38 ¢) technical specification limit.</p>
+      </section>
+      <section class="panel lab-det">
+        <div class="panel-head"><h2>HPGe gamma spectrometer</h2><span class="hint" id="labDetSample">No count yet</span></div>
+        <div class="form-row">
+          <select id="labCountSample" aria-label="Sample to count"></select>
+          <label>Shelf <select id="labShelf"></select></label>
+          <label>Live time <input id="labLive" type="number" min="1" step="any" value="300"> s</label>
+          <button id="labStart">Start count</button>
+          <button id="labStop">Stop</button>
+        </div>
+        <div class="lab-readouts">
+          <span>Live <b class="digits" id="labLiveRead">-</b></span>
+          <span>Real <b class="digits" id="labRealRead">-</b></span>
+          <span>Dead time <b class="digits" id="labDeadRead">-</b></span>
+          <span>Input <b class="digits" id="labRateRead">-</b></span>
+        </div>
+        <canvas id="labSpectrum" class="lab-spectrum" aria-label="Gamma spectrum"></canvas>
+        <div id="labPeaks" class="lab-scroll"></div>
+      </section>
+      <section class="panel lab-guides">
+        <h2>Materials experiments</h2>
+        <div id="labGuides"></div>
+      </section>
+    </div>
+    <div class="hmi-status"><span data-status="msg">Ready</span><span>Counting room</span><span data-status="clock">--:--:--</span></div>
   </div>
 </section>
 

@@ -4,6 +4,7 @@
 import { ReactorView } from "./view3d.js";
 import { HallWorld } from "./world.js";
 import { startMenuBackground } from "./menubg.js";
+import { initLab, renderLab } from "./lab.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -16,7 +17,7 @@ let trend = [];          // [t, power_w, ch2_pct, ch4_pct, peak_fuel_c, pool_c]
 let trendWindow = 600;
 let view = null;          // core camera on the plant workstation
 let world = null;         // the walkable hall
-let station = null;       // open workstation: "reactor", "plant" or null
+let station = null;       // open workstation: "reactor", "plant", "lab" or null
 let menuBg = null;        // the main menu's animated background, until the hall is entered
 const ann = {};           // annunciator states, shared with the hall's lamps
 let recentEvents = [];    // newest last, for the event log mirrored on the hall's plant monitor
@@ -162,6 +163,8 @@ function buildStatic() {
     drawTrend();
   });
   $("#instructorToggle").addEventListener("click", () => toggleDrawer());
+  $("#labBtn").addEventListener("click", () => openStation("lab"));
+  initLab(cmd);
   $("#closeInstructor").addEventListener("click", () => toggleDrawer(false));
   buildInstructor();
 
@@ -339,9 +342,9 @@ async function openStation(name) {
   world?.setActive(false);
   $("#menu").hidden = true;
   $("#prompt").hidden = true;
-  $("#station-reactor").hidden = name !== "reactor";
-  $("#station-plant").hidden = name !== "plant";
+  $$(".station").forEach((el) => { el.hidden = el.id !== `station-${name}`; });
   document.body.classList.add("at-station");
+  if (name === "lab") poll();
   if (name === "plant") {
     drawTrend();
     if (!view && info.models) {
@@ -359,8 +362,7 @@ async function openStation(name) {
 function closeStation() {
   if (!station) return;
   station = null;
-  $("#station-reactor").hidden = true;
-  $("#station-plant").hidden = true;
+  $$(".station").forEach((el) => { el.hidden = true; });
   document.body.classList.remove("at-station");
   if (world) {
     world.setActive(true);
@@ -546,6 +548,7 @@ function render() {
     if (sel && document.activeElement !== sel) sel.value = r.runaway ? "runaway" : r.stuck ? "stuck" : "none";
   }
 
+  renderLab(s, station === "lab");
   view?.update(s);
   world?.update(s, trend, ann, { trendWindow, events: recentEvents, truth, servoSetpointW: +$("#setpoint").value });
   $("#speedTag").textContent = s.speed === 0 ? "paused" : `${s.speed}×`;
@@ -659,7 +662,7 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    const s = await api(`/api/state?events_after=${eventsAfter}&trend_after=${trendAfter}`);
+    const s = await api(`/api/state?events_after=${eventsAfter}&trend_after=${trendAfter}${station === "lab" ? "&lab=1" : ""}`);
     if (state && (s.time_s < state.time_s - 1e-6 || s.event_count < eventsAfter)) {
       resetBuffers(); // the session was restarted
       polling = false;

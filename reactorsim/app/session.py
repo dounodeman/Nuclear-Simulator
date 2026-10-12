@@ -16,6 +16,7 @@ from collections import deque
 
 import numpy as np
 
+from reactorsim.materials import MaterialsLab
 from reactorsim.simulator import Simulator
 
 TICK_S = 0.05  # wall-clock pacing of the stepping loop
@@ -74,8 +75,11 @@ class SimSession:
         sim.instruments.auto_range(sim.power)
         for _ in range(int(60.0 / sim.control_dt)):
             sim._sample_instruments(sim.control_dt)
+        lab = MaterialsLab(sim.design.flux_per_watt, sim.design.delayed.beta_total,
+                           np.random.default_rng(seed + 1), unknown_seed=seed)
         with self._lock:
             self.sim = sim
+            self.lab = lab
             self.initial = initial
             self.trend: deque[tuple] = deque(maxlen=TREND_LEN)
             self._next_trend = 0.0
@@ -110,11 +114,18 @@ class SimSession:
         """Step the simulator by ``sim_seconds`` of plant time in control cycles."""
         with self._lock:
             sim = self.sim
+            t0, e0 = sim.t, sim.energy_j
             end = sim.t + sim_seconds
             while sim.t < end - 1e-9:
                 sim.step(min(sim.control_dt, end - sim.t))
                 if sim.t >= self._next_trend - 1e-9:
                     self._sample_trend()
+            # The materials lab follows the reactor at the average power over the interval.
+            if sim.t > t0:
+                self.lab.advance(sim.t - t0, (sim.energy_j - e0) / (sim.t - t0), t0)
+                for msg in self.lab.events:
+                    sim._event("operator", msg)
+                self.lab.events.clear()
 
     def _sample_trend(self) -> None:
         s = self.sim
@@ -125,7 +136,7 @@ class SimSession:
 
     # ------------------------------------------------------------------ state for the page
 
-    def state(self, events_after: int = 0, trend_after: float = -1.0) -> dict:
+    def state(self, events_after: int = 0, trend_after: float = -1.0, lab_spectrum: bool = False) -> dict:
         with self._lock:
             s = self.sim
             d = s.design
@@ -206,6 +217,7 @@ class SimSession:
                 "events": events,
                 "event_count": len(s.events),
                 "trend": trend,
+                "lab": self.lab.state(s.power, s.t, include_spectrum=lab_spectrum),
             }
         return _clean(out)
 
@@ -315,8 +327,51 @@ class SimSession:
                     s.protection.failed_trips = trips
                 s._event("operator", "Protection system " + ("in service" if s.protection.enabled
                                                              else "FAILED (no protective action)"))
+            # ---- materials lab: prepare, irradiate and count samples ----
+            elif action.startswith("lab_"):
+                return self._lab_command(action, a)
             else:
                 raise CommandError(f"unknown action {action!r}")
+        return {"ok": True}
+
+    def _lab_command(self, action: str, a: dict) -> dict:
+        s, lab = self.sim, self.lab
+        try:
+            if action == "lab_prepare":
+                mass = a.get("mass_g")
+                smp = lab.prepare(a["material"], None if mass in (None, "") else float(mass), bool(a.get("cadmium")))
+                s._event("operator", f"Sample {smp.id} prepared: {smp.name}, {smp.mass_g * 1000:.4g} mg"
+                                     + (", cadmium cover" if smp.cadmium else ""))
+                return {"ok": True, "sample": smp.id}
+            if action == "lab_insert":
+                rho = lab.insert(a["sample"], a["position"], s.t)
+                s.insert_reactivity(rho, ramp_seconds=5.0)  # lowered into place over a few seconds
+                smp = lab.sample(a["sample"])
+                s._event("operator", f"Sample {smp.id} ({smp.name}) loaded into {smp.location_label()}"
+                                     f", worth {rho / s.design.delayed.beta_total * 100:+.2f} cents")
+            elif action == "lab_remove":
+                smp = lab.sample(a["sample"])
+                where = smp.location_label()
+                rho = lab.remove(a["sample"], s.t)
+                s.insert_reactivity(rho, ramp_seconds=5.0)
+                s._event("operator", f"Sample {smp.id} removed from {where}: "
+                                     f"{smp.dose_rate_mr_h():.3g} mR/h at 30 cm")
+            elif action == "lab_count":
+                c = lab.start_count(a["sample"], float(a["live_s"]), float(a["shelf_cm"]), s.t)
+                s._event("operator", f"Counting sample {c.sample_id} on the HPGe, shelf {c.shelf_cm:g} cm, "
+                                     f"{c.preset_live_s:g} s live")
+            elif action == "lab_stop":
+                lab.stop_count()
+                for msg in lab.events:
+                    s._event("operator", msg)
+                lab.events.clear()
+            elif action == "lab_discard":
+                lab.discard(a["sample"])
+                s._event("operator", f"Sample {a['sample']} sent to radioactive waste")
+            else:
+                raise CommandError(f"unknown action {action!r}")
+        except ValueError as e:
+            raise CommandError(str(e)) from None
         return {"ok": True}
 
     def _rod(self, name: str):
