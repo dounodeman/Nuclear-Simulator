@@ -78,6 +78,18 @@ sim.run(600)
 print(sim.status()["level_in"], sim.hpci.running)
 ```
 
+The control-room app has the Peach Bottom main control room too (`Peach Bottom 2 control room`
+on the main menu, or `/pb2.html`): the Unit 2 horseshoe of GE benchboards in its analog state,
+with the reactor control benchboard (P603: full core display, APRM/IRM/SRM meters, rod select
+matrix and rod pushbuttons, mode switch, manual scram buttons, recirculation and feedwater
+stations), the core cooling benchboard (P601: HPCI, RCIC, core spray and RHR switches, the
+eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), with annunciator
+windows above each. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
+`reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
+engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).
+
+![Peach Bottom 2 control room](models/renders/pb2_control_room_overview.png)
+
 Every number, where it came from and which are still typical-BWR/4 stand-ins are in
 [docs/peach_bottom_2_reference.md](docs/peach_bottom_2_reference.md). The control-room
 application is still PUR-1 only; the Peach Bottom plant and rooms come next.
@@ -243,8 +255,9 @@ Build the app yourself on a Mac with `pip install ".[mac]"`,
 
 ## 3D models
 
-Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area,
-exported as glTF for the control-room interface, live in [models/](models/README.md).
+Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area, and of the
+Peach Bottom Unit 2 main control room (`models/peach_bottom`), exported as glTF for the
+control-room interface, live in [models/](models/README.md).
 
 ![PUR-1 reactor hall](models/renders/reactor_hall_overview.png)
 

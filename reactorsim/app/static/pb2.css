@@ -1,0 +1,13 @@
+/* Peach Bottom 2 control room page: the HUD on top of the walkable room. */
+.hud-log {
+  position: absolute; left: 12px; bottom: 44px; max-width: 46vw; pointer-events: none;
+  font: 11px var(--hmi-mono); color: #e8e8e0; text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+.hud-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-log .scram { color: #ff6a5a; font-weight: bold; }
+.hud-log .trip, .hud-log .eccs { color: #ffd060; }
+.hud-top #powerTag { margin-left: 6px; }
+.menu-link { font: 11px var(--hmi-font); color: var(--hmi-navy); text-align: center; }
+.menu-card { width: min(380px, 92vw); }
+.group .form-row { display: flex; gap: 6px; }
+.group .form-row > button { flex: 1; }

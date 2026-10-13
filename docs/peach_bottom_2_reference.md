@@ -121,4 +121,7 @@ specification (NEA/NSC/DOC(2001)1) can be read in full.
 - No drywell pressure, so ECCS and ADS act on level alone; no containment venting.
 - Rods move as one bank; no rod pattern, rod worth minimizer or rod block monitor.
 - Instruments read the true plant state (no noise or channel faults yet).
-- The control-room application does not yet include this plant.
+- The control room (`/pb2.html`) shows the plant model's readings on analog instruments; the
+  instruments read true values, and the systems the model does not carry (drywell pressure,
+  torus level, generator electrical values, feed pump turbine speeds) show plausible fixed or
+  derived numbers so the panels are complete.

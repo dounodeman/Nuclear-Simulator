@@ -10,7 +10,8 @@ files are the assets the future control-room interface will load.
 | `export/reactor_hall.glb` | The whole room: black-clad pool wall with the PUR-1 graphic, bridge with the five drives and their cables, core, in-pool fuel storage, process loop, HVAC, conduit, doors, hoist, stair and platform, cable gantry, console, video wall, I&C cabinets, and the adjoining lab with the diagnostics bench; plus the basement off the main door: the corridor, B70B, B86, B85, B77 and B84 |
 | `export/control_room.glb` | The operator area alone (desk console with three monitors, hard-wired panel, blue chairs, carpet mat, four I&C cabinets, the wall display over them) on a floor slab with the west and north walls |
 | `export/pur1_core.glb` | The core alone: grid plate, 13 standard + 3 control assemblies with plates, 20 graphite reflectors, irradiation tubes, control blades, ion chambers, fission chamber, source, drop tubes |
-| `renders/*.png` | Preview renders of each model |
+| `export/pb2_control_room.glb` | Peach Bottom Unit 2 main control room (`peach_bottom/`): the horseshoe of GE benchboards (P603 reactor control, P601 core cooling, P653 turbine-generator, P602/P652 corner panels), the back panels, the supervisor's desk, in the analog state the visual reference describes. Every meter, recorder, lamp, switch and annunciator box is a `ui_` mesh whose glTF extras say what it shows (`panels.py`), so the page draws the faces from the live plant |
+| `renders/*.png` | Preview renders of each model (the `pb2_*` ones are screenshots of the room in the app, lit by the page) |
 
 ## Build
 
@@ -35,6 +36,8 @@ on Debian/Ubuntu) and `LIBGL_ALWAYS_SOFTWARE=1` when there is no GPU.
 - `pur1/control_room.py` desk console, video wall, I&C cabinets, diagnostics bench.
 - `pur1/reactor_hall.py` room, pool, shield, bridge and drives, process loop; places the core and the console area.
 - `pur1/basement.py` the corridor south from the main door and the rooms off it (B70B expanding lab space, B86 thermal-hydraulics lab, B85 beta-voltaic facility, B77 chemistry room, B84 subcritical pile), from the basement floor plan.
+- `peach_bottom/panels.py` the BWR instrument kit: edgewise and round meters, strip-chart recorders, LED readouts, indicating lights, pushbuttons (mushroom scram heads), pistol-grip control switches, keylock switches, manual/auto stations, thumbwheels, annunciator boxes, the full core display and the rod select matrix. Each face carries the scale, unit, legend, alarm mark and the plant reading it shows as custom properties exported in the glTF extras.
+- `peach_bottom/control_room.py` the room and the panel layouts: what sits where on P603, P601 and P653, the corner and back panels, lights, doors and furniture.
 - `build.py` entry point, cameras and lights for the previews.
 
 The models carry flat colours only. The app adds surface detail when it loads them

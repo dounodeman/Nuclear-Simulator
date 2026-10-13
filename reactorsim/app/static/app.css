@@ -301,6 +301,7 @@ body.main-menu .menu-head { display: flex; }
 .menu-mark { font: bold 28px var(--hmi-font); color: var(--hmi-navy); letter-spacing: .04em; }
 .menu-body { display: flex; flex-direction: column; gap: 6px; }
 .menu-body > button { width: 100%; padding: 4px 10px; }
+.menu-link { font: 11px var(--hmi-font); color: var(--hmi-navy); text-align: center; }
 .menu-body .form-row { flex-wrap: nowrap; }
 .menu-body select { flex: 1; width: 0; min-width: 0; }
 .menu .speed { gap: 2px; }

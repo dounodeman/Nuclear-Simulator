@@ -11,7 +11,7 @@ or with a Blender install:
 
     blender --background --python models/build.py -- --render
 
-Outputs: models/export/{reactor_hall,control_room,pur1_core}.glb
+Outputs: models/export/{reactor_hall,control_room,pur1_core,pb2_control_room}.glb
          models/renders/*.png (with --render)
 """
 from __future__ import annotations
@@ -87,7 +87,29 @@ def build_core(do_render: bool, quality: int):
         render(os.path.join(RENDERS, "core_top.png"), cam, samples=quality)
 
 
-TARGETS = {"reactor_hall": build_reactor_hall, "control_room": build_control_room, "core": build_core}
+def build_pb2_control_room(do_render: bool, quality: int):
+    """Peach Bottom Unit 2 main control room (models/peach_bottom)."""
+    from models.peach_bottom.control_room import build_control_room as _room
+    reset_scene()
+    palette()
+    _room()
+    export_glb(os.path.join(EXPORT, "pb2_control_room.glb"))
+    if do_render:
+        add_light("Key", "AREA", (0.0, -2.0, 3.1), 3000, size=6.0, rotation=(0.0, 0.0, 0.0))
+        add_light("Fill_W", "POINT", (-4.0, 1.0, 2.8), 900)
+        add_light("Fill_E", "POINT", (4.0, 1.0, 2.8), 900)
+        cam = add_camera("Cam_Horseshoe", (1.5, -5.5, 2.6), (-0.5, 2.5, 1.3), lens=20)
+        render(os.path.join(RENDERS, "pb2_control_room_overview.png"), cam, samples=quality)
+        cam = add_camera("Cam_P603", (0.3, 1.9, 1.6), (0.3, 4.0, 1.5), lens=24)
+        render(os.path.join(RENDERS, "pb2_control_room_p603.png"), cam, samples=quality)
+        cam = add_camera("Cam_Scram", (0.9, 2.4, 1.5), (0.8, 3.5, 0.9), lens=32)
+        render(os.path.join(RENDERS, "pb2_control_room_rod_controls.png"), cam, samples=quality)
+        cam = add_camera("Cam_P601", (-3.0, 0.2, 1.6), (-5.2, 0.2, 1.4), lens=24)
+        render(os.path.join(RENDERS, "pb2_control_room_p601.png"), cam, samples=quality)
+
+
+TARGETS = {"reactor_hall": build_reactor_hall, "control_room": build_control_room, "core": build_core,
+           "pb2_control_room": build_pb2_control_room}
 
 
 def main(argv):
