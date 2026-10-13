@@ -64,6 +64,9 @@ class Simulator:
     def __init__(self, design: ReactorDesign | str = "pur1", seed: int | None = None,
                  control_dt: float = 0.05, max_substep: float = 1.0):
         self.design = get_design(design) if isinstance(design, str) else design
+        if not isinstance(self.design, ReactorDesign):
+            raise TypeError(f"{self.design.key!r} is a {self.design.kind} design; "
+                            "use reactorsim.simulator_for() or reactorsim.bwr.BWRSimulator")
         d = self.design
         self.control_dt = control_dt
         self.max_substep = max_substep
