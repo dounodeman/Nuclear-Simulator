@@ -67,10 +67,11 @@ ROOM_Y = (-5.0, 4.2)                 # ASSUMED (layout map): about 9.2 m north-s
 ROOM_H = 7.0                         # ASSUMED: high bay; free volume comfortably > 424 m3 (TS minimum)
 WALL_T = 0.30                        # ASSUMED: concrete block
 DOOR_W, DOOR_H = 0.9, 2.1            # ASSUMED: personnel doors
-MAIN_DOOR_Y = -4.15                  # ASSUMED (layout map): main door with EXIT sign, east wall, SE corner
+MAIN_DOOR_Y = -4.0                   # PLAN (basement floor plan): pair of doors in the east wall near its south end
+MAIN_DOOR_W = 1.6                    # PLAN: a pair of leaves swinging into the room, open to the corridor
 STORAGE_DOOR_Y = -2.95               # ASSUMED (layout map): storage-room door, west wall
 LAB_OPENING_X = (-1.2, 0.4)          # ASSUMED (layout map): opening in the north wall to the adjacent lab
-LAB = (-3.6, 1.4, 4.2, 7.9)          # ASSUMED (layout map): adjacent lab (B70B?) x0, x1, y0, y1
+LAB = (-3.6, 1.4, 4.2, 7.9)          # ASSUMED (layout map): adjacent lab x0, x1, y0, y1 (the floor plan puts B70B east of B70A; see basement.py)
 LAB_H = 3.0                          # ASSUMED: ordinary ceiling height in the lab
 SOFFIT = (-7.2, 0.4, 3.4, 3.3)       # ASSUMED (photos): white bulkhead along the north side: x0, x1, y0, underside z
 FLOOR_STRIPE_RADIUS = 2.6            # ASSUMED (photos, map): yellow floor stripe around the pool
@@ -97,3 +98,40 @@ VIDEO_WALL_GRID = (4, 3)             # derived: 12 x 1.17 m2 = 14 m2 = 150 ft2 (
 VIDEO_WALL_CENTER_Z = 2.3            # ASSUMED
 RACK_SIZE = (0.80, 0.60, 2.00)       # ASSUMED: standard 19 in equipment racks (depth, width, height)
 RACK_COUNT = 5                       # ASSUMED: RTP 3000, Mirion NI channels, historian, data diode, UPS
+
+# ---- Basement around B70A (floor plan) ---------------------------------------------------------
+# From the PUR-1 basement floor plan the project was given (20 ft scale bar = 152 px, so
+# 0.0401 m per px). Read with the plan's top as north, which is how the plan's B70A matches the
+# reference photos the room model follows (stair along the north wall up to the NE door, storage
+# room B72 off the west wall, the main door on the east wall near its south end). The plan's
+# north arrow points down and to the right; the model keeps the photo frame, so "north" here
+# means the model's +Y.
+# The reactor room keeps its photo-based size (11.6 m x 9.2 m; the plan draws it about
+# 8.0 m x 11.6 m), so everything below is placed from the main door, at the plan's scale:
+# x = 4.7 + (px - 388) * 0.0401, y = -5.0 - (py - 483) * 0.0401.
+BASEMENT_H = 3.0                     # ASSUMED: ordinary basement ceiling height (rooms and corridor)
+BASEMENT_WALL_T = 0.20               # ASSUMED: interior block walls
+# Wall centre lines (m). Corridor along the east side of B70A, running south from the main door.
+CORRIDOR_X = (4.6, 7.6)              # PLAN: corridor walls at px 390 / 460, 2.8 m clear
+CORRIDOR_HEAD_Y = -2.75              # PLAN: corridor's north end, px 427 (B70B wraps over it)
+EAST_WALL_X = 14.8                   # PLAN: east wall of B70B, B86, B85 and B84, px 640
+B70B_SOUTH_Y = -5.1                  # PLAN: B70B's south wall east of the corridor, px 485
+B86_Y = (-17.4, -11.35)              # PLAN: B86 between px 645 and 792 (south, north wall)
+B85_Y = (-23.6, -17.4)               # PLAN: B85 between px 792 and 947
+B84_Y = (-29.5, -23.6)               # PLAN: B84 between px 947 and 1095; its north wall ends the corridor
+B77_X = 0.5                          # PLAN: B77's west wall, px 285 (its east wall is the corridor's)
+B77_Y = (-17.4, -11.35)              # PLAN: B77 level with B86, px 645 .. 790
+# Doors: (wall position along the wall, width, leaves). Double doors where the plan draws pairs.
+DOOR_B70B = (-3.8, 1.6, 2)           # PLAN: pair in the corridor's east wall, px 432..475, swinging into B70B
+DOOR_B86 = (-12.8, 1.6, 2)           # PLAN: pair, px 655..700, swinging into the corridor
+DOOR_B85 = (-18.95, 1.6, 2)          # PLAN: pair, px 810..852, swinging into the corridor
+DOOR_B77 = (-14.4, 1.4, 2)           # PLAN: pair in the corridor's west wall, px 700..735
+DOOR_B84 = (6.3, 1.0, 1)             # PLAN: single door at the corridor's south end, px 410..445
+DOOR_B76 = (-8.2, 1.4, 2)            # PLAN: B76 (not modelled inside), closed
+DOOR_B87 = (-8.85, 0.9, 1)           # PLAN: B87 (not modelled inside), closed
+DOOR_STAIR = (-22.9, 0.9, 1)         # PLAN: toward the south stair and B78..B83 (not modelled), closed
+# Subcritical pile in B84: a graphite stack 172.7 cm x 172.7 cm x 203.2 cm (Purdue pile geometry
+# table, Instruments 9(2):13, 2025); the plan draws it as a square near the room's middle.
+PILE_SIZE = (1.727, 1.727, 2.032)    # SOURCED
+PILE_POS = (11.6, -25.6)             # PLAN: square at px 540..580, py 977..1017
+PILE_TESTBED = 0.53                  # ASSUMED shape: a cube of ~1.5e5 cm3 (SOURCED volume) let into the top

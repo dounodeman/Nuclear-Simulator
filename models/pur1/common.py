@@ -143,6 +143,8 @@ def palette() -> dict[str, bpy.types.Material]:
         "glass": material("Glass", (0.8, 0.9, 1.0), rough=0.05, alpha=0.2),
         "sign_yellow": material("SignYellow", (1.0, 0.85, 0.0), rough=0.6),
         "sign_magenta": material("SignMagenta", (0.75, 0.0, 0.55), rough=0.6),
+        "wood": material("PalletWood", (0.58, 0.45, 0.30), rough=0.85),
+        "cardboard": material("Cardboard", (0.66, 0.52, 0.34), rough=0.95),
     }
 
 
@@ -422,6 +424,27 @@ def curved_text(name, text, mat, radius, center_angle, z_center, size, depth=0.0
         a = center_angle + x / radius
         r = radius + zz + depth / 2
         v.co = mathutils.Vector((r * math.cos(a), r * math.sin(a), z_center + y))
+    mesh.name = name
+    mesh.validate()
+    mesh.update()
+    mesh.materials.append(mat)
+    ob = bpy.data.objects.new(name, mesh)
+    ob.parent = parent
+    bpy.context.scene.collection.objects.link(ob)
+    return ob
+
+
+def flat_text(name, text, mat, center, facing, size, depth=0.004, parent=None, align="CENTER"):
+    """Flat upright lettering (a door plate, a wall sign) centred on `center`, its face looking
+    along the horizontal angle `facing` (radians from +X), set in the same bold sans."""
+    import mathutils
+    mesh = _text_mesh(text, size, depth, align)
+    n = mathutils.Vector((math.cos(facing), math.sin(facing), 0.0))
+    r = mathutils.Vector((-math.sin(facing), math.cos(facing), 0.0))   # the reader's right
+    c = mathutils.Vector(center)
+    for v in mesh.vertices:
+        x, y, zz = v.co
+        v.co = c + r * x + mathutils.Vector((0, 0, y)) + n * (zz + depth / 2)
     mesh.name = name
     mesh.validate()
     mesh.update()
