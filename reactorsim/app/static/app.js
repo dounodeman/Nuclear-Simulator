@@ -341,7 +341,7 @@ function leaveMainMenu() {
   menuBg.stop();
   menuBg = null;
   document.body.classList.remove("main-menu");
-  $("#menuTitle").textContent = "PUR-1 Simulator - Menu";
+  $("#menuTitle").textContent = "NPSS - Menu";
 }
 
 function enterHall() {

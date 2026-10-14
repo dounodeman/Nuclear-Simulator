@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import subprocess
 import urllib.error
 import urllib.request
 
@@ -215,6 +216,36 @@ def test_release_parsing():
     assert info.status == "available" and info.latest == 12 and info.asset_url
     assert updates.info_from_release(rel, current=12).status == "up_to_date"
     assert updates.parse_build("v1.0") is None
+
+
+def test_release_from_before_the_rename_still_updates():
+    rel = {"tag_name": "build-12", "assets": [{"name": updates.LEGACY_ASSET_NAME, "url": "https://api.github.com/x/1"}]}
+    assert updates.info_from_release(rel, current=11).asset_url == "https://api.github.com/x/1"
+
+
+def test_settings_move_from_the_old_app_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(updates, "_config_base", lambda: tmp_path)
+    (tmp_path / updates.LEGACY_APP_NAME).mkdir()
+    (tmp_path / updates.LEGACY_APP_NAME / "settings.json").write_text('{"github_token": "t"}')
+    assert updates.settings_dir() == tmp_path / updates.APP_NAME
+    assert (tmp_path / updates.APP_NAME / "settings.json").exists()
+    assert not (tmp_path / updates.LEGACY_APP_NAME).exists()
+
+
+def test_swap_renames_the_bundle(tmp_path):
+    """Updating an app installed under the old name leaves the new bundle under its own name."""
+    old = tmp_path / "Applications" / f"{updates.LEGACY_APP_NAME}.app"
+    new = tmp_path / "work" / "unpacked" / f"{updates.APP_NAME}.app"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    (new / "marker").write_text("new")
+    script = tmp_path / "swap.sh"
+    script.write_text(updates._SWAP_SCRIPT)
+    # pid 999999 is not running, so the script swaps at once; `open` is absent off macOS, which is fine.
+    subprocess.run(["/bin/sh", str(script), "999999", str(new), str(old), str(tmp_path / "work")],
+                   capture_output=True)
+    assert (old.parent / f"{updates.APP_NAME}.app" / "marker").read_text() == "new"
+    assert not old.exists()
 
 
 def test_token_storage_is_private(tmp_path, monkeypatch):

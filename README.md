@@ -1,6 +1,7 @@
-# reactorsim
+# NPSS
 
-A physics-first nuclear reactor simulator. It is built to be a credible engineering
+**NPSS** (Nuclear Power Plant Simulator Suite) is a physics-first nuclear reactor simulator.
+Its Python package is `reactorsim`. It is built to be a credible engineering
 model first and a control-room experience second, and it is designed to grow from
 one reactor to many.
 
@@ -228,13 +229,14 @@ experiments, rod and instrument faults, a chiller trip, a pool leak and protecti
 ![Reactor control workstation](docs/img/reactor_workstation.png)
 
 **Install the app.** Every merge to `main` that touches the simulator builds
-`PUR-1 Simulator.app` for Apple silicon and publishes it on the repository's
-[Releases](../../releases) page as `PUR-1-Simulator-macOS.zip`.
+`NPSS.app` for Apple silicon and publishes it on the repository's
+[Releases](../../releases) page as `NPSS-macOS.zip`. (Apps installed when it was still called PUR-1 Simulator
+update themselves to NPSS and are renamed on the way.)
 
 1. Download the zip from the latest release, unzip it and drag the app to Applications.
 2. The app is not signed with an Apple developer certificate, so macOS blocks the first
    launch. Open it once, then go to System Settings > Privacy & Security and click
-   **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/PUR-1 Simulator.app"`).
+   **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/NPSS.app"`).
 3. That is all: the repository is public, so the app needs no token to see new builds. (The
    **Updates** dialog still accepts an optional GitHub token, which raises the API rate limit
    and keeps updates working if the repository is ever made private; it is stored only on
@@ -251,7 +253,7 @@ python -m reactorsim app     # or: python -m reactorsim app --browser --initial 
 ```
 
 Build the app yourself on a Mac with `pip install ".[mac]"`,
-`python packaging/macos/make_icon.py` and `pyinstaller packaging/macos/pur1.spec`.
+`python packaging/macos/make_icon.py` and `pyinstaller packaging/macos/npss.spec`.
 
 ## 3D models
 

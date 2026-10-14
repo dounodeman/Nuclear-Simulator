@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PUR-1 Simulator</title>
+<title>NPSS</title>
 <link rel="stylesheet" href="app.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
@@ -31,7 +31,7 @@
 <div class="menu" id="menu">
   <canvas id="menuBg" class="menu-bg" aria-hidden="true"></canvas>
   <div class="menu-card win" role="dialog" aria-labelledby="menuTitle">
-    <div class="win-title"><span id="menuTitle">PUR-1 Simulator - Main Menu</span></div>
+    <div class="win-title"><span id="menuTitle">NPSS - Main Menu</span></div>
     <div class="win-body menu-body">
       <div class="menu-head"><span class="menu-mark">PUR-1</span><span>Purdue University Reactor Number One</span></div>
       <button id="enterBtn" class="primary" disabled>Loading the hall…</button>
@@ -268,7 +268,7 @@
 
 <dialog id="updateDlg" class="win">
   <form method="dialog">
-    <div class="win-title"><span>PUR-1 Simulator - Updates</span></div>
+    <div class="win-title"><span>NPSS - Updates</span></div>
     <div class="win-body">
     <p id="updMsg" class="upd-msg">Checking…</p>
     <pre id="updNotes" class="upd-notes" hidden></pre>
@@ -291,7 +291,7 @@
 
 <dialog id="restartDlg" class="win">
   <form method="dialog">
-    <div class="win-title"><span>PUR-1 Simulator - Restart</span></div>
+    <div class="win-title"><span>NPSS - Restart</span></div>
     <div class="win-body">
     <p class="upd-msg">Restart the simulation from <b id="restartTo"></b>? The reactor, rods, set points,
       faults, alarms, event log, trends and clock all start over.</p>

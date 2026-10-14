@@ -1,13 +1,13 @@
-# PyInstaller spec for the PUR-1 Simulator Mac app.
+# PyInstaller spec for the NPSS (Nuclear Power Plant Simulator Suite) Mac app.
 #   pip install ".[mac]"
-#   pyinstaller packaging/macos/pur1.spec --noconfirm
-# produces "dist/PUR-1 Simulator.app".
+#   pyinstaller packaging/macos/npss.spec --noconfirm
+# produces "dist/NPSS.app".
 from pathlib import Path
 
 from reactorsim import __version__, _build
 
 ROOT = Path(SPECPATH).resolve().parents[1]
-APP = "PUR-1 Simulator"
+APP = "NPSS"
 ICON = ROOT / "packaging" / "macos" / "icon.icns"
 
 a = Analysis(
@@ -37,6 +37,7 @@ app = BUNDLE(
     coll,
     name=f"{APP}.app",
     icon=str(ICON) if ICON.exists() else None,
+    # Kept from when the app was called "PUR-1 Simulator", so macOS treats NPSS as the same app.
     bundle_identifier="io.github.dounodeman.pur1-simulator",
     version=f"{__version__}.{_build.BUILD}",
     info_plist={

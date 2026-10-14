@@ -15,7 +15,7 @@ import webbrowser
 from reactorsim.app.server import ControlRoomServer
 from reactorsim.app.session import INITIAL_STATES, SimSession
 
-WINDOW_TITLE = "PUR-1 Simulator"
+WINDOW_TITLE = "NPSS"
 
 
 def run(initial: str = "cold", port: int = 0, browser: bool = False, verbose: bool = False) -> int:
