@@ -15,7 +15,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 from reactorsim.simulator import Simulator  # noqa: E402
-from reactorsim.reactors import get_design, list_designs  # noqa: E402
+from reactorsim.reactors import get_design, list_designs, simulator_for  # noqa: E402
 
-__all__ = ["Simulator", "get_design", "list_designs"]
+__all__ = ["Simulator", "get_design", "list_designs", "simulator_for"]
 __version__ = "0.1.0"

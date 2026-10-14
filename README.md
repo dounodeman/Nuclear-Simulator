@@ -8,6 +8,10 @@ The first reactor is **PUR-1**, Purdue University's 10 kW pool research reactor
 and the first US reactor licensed with an all-digital safety and control system.
 It is the test bed: a small, well-documented core whose digital controls can be modeled one-for-one.
 
+The second is **Peach Bottom Unit 2**, a General Electric BWR/4 in a Mark I containment,
+modelled as it ran the 1977 turbine trip tests that became the OECD/NEA BWR Turbine Trip
+benchmark. See [Peach Bottom 2](#peach-bottom-2-bwr4) below.
+
 ![Startup to 10 kW](docs/img/startup.png)
 
 ## What it models
@@ -47,6 +51,48 @@ sim.insert_reactivity(0.003)             # an experiment at the tech-spec limit
 sim.run(60)
 print(sim.status()["scram_causes"])      # period and power scrams
 ```
+
+## Peach Bottom 2 (BWR/4)
+
+`reactorsim.bwr.BWRSimulator` wraps the same kinetics, poison, decay-heat and burnup models in
+a lumped BWR plant: a fuel node conducting to boiling coolant, inlet subcooling and a core void
+that lags its steady value, one dome pressure buffered by the steam space and the saturated
+liquid, two recirculation pumps on jet pumps plus natural circulation, main steam lines with
+MSIVs, a pressure regulator on the turbine control valves, 25% bypass and eleven safety/relief
+valves to the torus, three-element feedwater level control, HPCI, RCIC, core spray, LPCI and
+ADS at their level and pressure permissives, and the reactor protection system (APRM fixed and
+flow-biased, high pressure, Level 3, stop-valve and MSIV closure) with the ATWS pump trip.
+
+```bash
+python -m reactorsim run pb2_turbine_trip_benchmark      # the 1977 TT2 test
+python -m reactorsim run pb2_station_blackout --plot sbo.png
+```
+
+```python
+from reactorsim import simulator_for
+
+sim = simulator_for("peach_bottom_2")
+sim.initialize_at_power(3293e6)          # steady at rated power, rods at the critical notch
+sim.trip_feedwater()
+sim.run(600)
+print(sim.status()["level_in"], sim.hpci.running)
+```
+
+The control-room app has the Peach Bottom main control room too (`Peach Bottom 2 control room`
+on the main menu, or `/pb2.html`): the Unit 2 horseshoe of GE benchboards in its analog state,
+with the reactor control benchboard (P603: full core display, APRM/IRM/SRM meters, rod select
+matrix and rod pushbuttons, mode switch, manual scram buttons, recirculation and feedwater
+stations), the core cooling benchboard (P601: HPCI, RCIC, core spray and RHR switches, the
+eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), with annunciator
+windows above each. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
+`reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
+engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).
+
+![Peach Bottom 2 control room](models/renders/pb2_control_room_overview.png)
+
+Every number, where it came from and which are still typical-BWR/4 stand-ins are in
+[docs/peach_bottom_2_reference.md](docs/peach_bottom_2_reference.md). The control-room
+application is still PUR-1 only; the Peach Bottom plant and rooms come next.
 
 ## Reactor physics experiments
 
@@ -209,8 +255,9 @@ Build the app yourself on a Mac with `pip install ".[mac]"`,
 
 ## 3D models
 
-Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area,
-exported as glTF for the control-room interface, live in [models/](models/README.md).
+Scripted Blender (`bpy`) models of the PUR-1 reactor hall, core and console area, and of the
+Peach Bottom Unit 2 main control room (`models/peach_bottom`), exported as glTF for the
+control-room interface, live in [models/](models/README.md).
 
 ![PUR-1 reactor hall](models/renders/reactor_hall_overview.png)
 

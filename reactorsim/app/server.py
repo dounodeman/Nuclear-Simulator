@@ -4,6 +4,8 @@
                                                      (lab=1 adds the gamma spectrum)
     POST /api/command   {"action": ..., ...}       operator and instructor actions
     GET  /api/info                                  reactor, initial states, speeds, build
+    GET  /api/pb2/state, POST /api/pb2/command      the same for the Peach Bottom 2 session
+                                                    (started the first time it is asked for)
     GET  /api/update                                check GitHub for a newer app build
     POST /api/update/token  {"token": ...}          store (or clear) the GitHub token
     POST /api/update/install                        download, swap and relaunch (packaged app)
@@ -23,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 from reactorsim import _build, __version__
 from reactorsim.app import updates
+from reactorsim.app import bwr_session
 from reactorsim.app.session import INITIAL_STATES, SPEEDS, CommandError, SimSession
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -91,11 +94,16 @@ class _Handler(BaseHTTPRequestHandler):
             trend_after = float(q.get("trend_after", ["-1"])[0])
             lab = q.get("lab", ["0"])[0] == "1"
             self._json(self.server.session.state(events_after, trend_after, lab_spectrum=lab))
+        elif p == "/api/pb2/state":
+            events_after = int(q.get("events_after", ["0"])[0])
+            self._json(self.server.pb2_session().state(events_after))
         elif p == "/api/info":
             self._json({
                 "version": __version__, "build": _build.BUILD, "commit": _build.COMMIT,
                 "packaged": updates.is_packaged_app(),
                 "initial_states": INITIAL_STATES, "speeds": list(SPEEDS),
+                "plants": {"pur1": {"page": "/", "initial_states": INITIAL_STATES},
+                           "pb2": {"page": "/pb2.html", "initial_states": bwr_session.INITIAL_STATES}},
                 "models": models_dir() is not None,
                 "has_token": updates.token() is not None,
                 "native_window": self.server.on_fullscreen is not None,
@@ -127,6 +135,11 @@ class _Handler(BaseHTTPRequestHandler):
                 if not isinstance(action, str):
                     raise CommandError("missing action")
                 self._json(self.server.session.command(action, **body))
+            elif p == "/api/pb2/command":
+                action = body.pop("action", None)
+                if not isinstance(action, str):
+                    raise CommandError("missing action")
+                self._json(self.server.pb2_session().command(action, **body))
             elif p == "/api/update/token":
                 updates.set_token(body.get("token") or None)
                 self.server.last_update = None
@@ -164,6 +177,21 @@ class ControlRoomServer(ThreadingHTTPServer):
         self.on_fullscreen = None  # set by the desktop shell: toggles the native window's full screen
         self.last_update: updates.UpdateInfo | None = None
         self._update_lock = threading.Lock()
+        self._pb2: bwr_session.BWRSession | None = None
+        self._pb2_lock = threading.Lock()
+
+    def pb2_session(self) -> bwr_session.BWRSession:
+        """The Peach Bottom 2 session, started on first use so the PUR-1 room pays nothing for it."""
+        with self._pb2_lock:
+            if self._pb2 is None:
+                self._pb2 = bwr_session.BWRSession("full_power")
+                self._pb2.start()
+            return self._pb2
+
+    def shutdown(self):
+        super().shutdown()
+        if self._pb2 is not None:
+            self._pb2.stop()
 
     @property
     def url(self) -> str:

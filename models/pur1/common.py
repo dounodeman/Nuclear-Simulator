@@ -385,14 +385,14 @@ def _bold_font():
     return None
 
 
-def _text_mesh(text, size, depth, align="CENTER"):
+def _text_mesh(text, size, depth, align="CENTER", resolution=3):
     curve = bpy.data.curves.new("text_curve", "FONT")
     curve.body = text
     curve.size = size
     curve.extrude = depth / 2
     curve.align_x = align
     curve.align_y = "CENTER"
-    curve.resolution_u = 3        # the glyph outlines: enough for 0.5 m letters, far fewer triangles
+    curve.resolution_u = resolution   # the glyph outlines: 3 is enough for 0.5 m letters; 1 for engraved nameplates
     font = _bold_font()
     if font:
         curve.font = font
@@ -434,11 +434,11 @@ def curved_text(name, text, mat, radius, center_angle, z_center, size, depth=0.0
     return ob
 
 
-def flat_text(name, text, mat, center, facing, size, depth=0.004, parent=None, align="CENTER"):
+def flat_text(name, text, mat, center, facing, size, depth=0.004, parent=None, align="CENTER", resolution=3):
     """Flat upright lettering (a door plate, a wall sign) centred on `center`, its face looking
     along the horizontal angle `facing` (radians from +X), set in the same bold sans."""
     import mathutils
-    mesh = _text_mesh(text, size, depth, align)
+    mesh = _text_mesh(text, size, depth, align, resolution)
     n = mathutils.Vector((math.cos(facing), math.sin(facing), 0.0))
     r = mathutils.Vector((-math.sin(facing), math.cos(facing), 0.0))   # the reader's right
     c = mathutils.Vector(center)
@@ -498,7 +498,8 @@ def export_glb(path: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Cameras and lights are kept out of the asset; the interface adds its own.
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_apply=True,
-                              export_cameras=False, export_lights=False, export_yup=True)
+                              export_cameras=False, export_lights=False, export_yup=True,
+                              export_extras=True)
     print(f"exported {path} ({os.path.getsize(path) / 1024:.0f} kB)")
 
 

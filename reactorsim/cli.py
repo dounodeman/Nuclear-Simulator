@@ -2,6 +2,7 @@
 
     python -m reactorsim list
     python -m reactorsim run startup --plot startup.png --csv startup.csv
+    python -m reactorsim run pb2_turbine_trip --plot tt.png   # Peach Bottom 2 (BWR/4)
     python -m reactorsim experiments       # list the reactor physics experiments
     python -m reactorsim experiment rod_calibration --plot rr.png --json rr.json
     python -m reactorsim app               # interactive control room
@@ -15,8 +16,11 @@ import json
 import math
 import sys
 
+from reactorsim.bwr.scenarios import BWR_SCENARIOS, plot_bwr_run
 from reactorsim.experiments import EXPERIMENTS
-from reactorsim.scenarios import SCENARIOS
+from reactorsim.scenarios import SCENARIOS as POOL_SCENARIOS
+
+SCENARIOS = {**POOL_SCENARIOS, **BWR_SCENARIOS}
 
 
 def _jsonable(v):
@@ -68,8 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     print("\nEvent log:")
     print("\n".join(events) if events else "  (none)")
     if args.plot:
-        from reactorsim.plotting import plot_run
-        plot_run(sim, sc.title, args.plot)
+        if sc.key in BWR_SCENARIOS:
+            plot_bwr_run(sim, sc.title, args.plot)
+        else:
+            from reactorsim.plotting import plot_run
+            plot_run(sim, sc.title, args.plot)
         print(f"\nPlot written to {args.plot}")
     if args.csv:
         arrays = sim.history_arrays()
