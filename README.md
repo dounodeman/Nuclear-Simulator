@@ -92,7 +92,10 @@ full core display of red-lit rod modules on a black grid with its green readout,
 edgewise meters, pistol-grip switches with red/green lights, rows of square illuminated
 pushbuttons, blue keypad displays, a few flat screens, stencilled panel-number plates and
 yellow-tabbed document pockets on the console fronts, red doors and a map-style desk of
-laminated drawings. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
+laminated drawings. The boards are packed the way the photos show them: banks of small edgewise
+meters fill the space between each system's main indications and long rows of valve switches
+with red/green lights run under them, all still showing live readings. Every meter, recorder,
+lamp and switch is driven by `BWRSimulator` through
 `reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
 engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).
 

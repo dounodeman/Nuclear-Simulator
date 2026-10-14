@@ -29,12 +29,70 @@ document pockets.
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 
 import bpy
 
 from models.pur1.common import MeshBuilder, empty, flat_text, material
 
 _mats: dict[str, bpy.types.Material] = {}
+_occupied: dict[str, list[tuple[float, float, float, float]]] = {}
+
+
+_batch: tuple | None = None   # (frame, {material key: MeshBuilder}) while a filler is packing a band
+
+
+@contextmanager
+def batched(frame, name):
+    """Inside this block the static parts (bezels, glass, collars, escutcheons) of instruments
+    on ``frame`` go into one mesh per material instead of an object each, which keeps the
+    export small and the draw calls few when a filler packs hundreds of instruments. The live
+    parts (faces, lenses, handles) stay separate objects."""
+    global _batch
+    _batch = (frame, {})
+    try:
+        yield
+    finally:
+        fr, builders = _batch
+        _batch = None
+        for key, mb in builders.items():
+            if mb.verts:
+                mb.build(f"{'Glass_' if key == 'glass' else ''}{name}_{key}", mats()[key], fr)
+
+
+def _builder(frame, key):
+    if _batch is not None and _batch[0] is frame:
+        return _batch[1].setdefault(key, MeshBuilder())
+    return MeshBuilder()
+
+
+def _finish(mb, name, key, frame, bevel=0.0):
+    if _batch is not None and _batch[0] is frame:
+        return None
+    return mb.build(name, mats()[key], frame, bevel=bevel)
+
+
+def _segs(n):
+    """Fewer facets for the small parts of batched (filler) instruments."""
+    return max(10, n // 2) if _batch is not None else n
+
+
+def reset_layout() -> None:
+    """Forget what has been placed (call once per room build)."""
+    _occupied.clear()
+
+
+def claim(frame, r, z, w, h) -> None:
+    """Record that a w x h area centred on (r, z) of ``frame`` is taken, so the fillers that
+    pack the empty panel space (``fill_meters``, ``fill_switches`` ...) keep clear of it."""
+    _occupied.setdefault(frame.name, []).append((r - w / 2, r + w / 2, z - h / 2, z + h / 2))
+
+
+def is_free(frame, r, z, w, h, margin=0.012) -> bool:
+    for r0, r1, z0, z1 in _occupied.get(frame.name, []):
+        if r - w / 2 - margin < r1 and r + w / 2 + margin > r0 and z - h / 2 - margin < z1 and z + h / 2 + margin > z0:
+            return False
+    return True
 
 
 def mats() -> dict[str, bpy.types.Material]:
@@ -126,6 +184,7 @@ def nameplate(frame, text, r, z, size=0.012, width=None, mat=None):
     """Black engraved nameplate with white lettering, as on GE panels."""
     m = mats()
     width = width or (len(text) * size * 0.72 + 0.02)
+    claim(frame, r, z, width, size + 0.012)
     MeshBuilder().box((-0.002, -r, z), (0.004, width, size + 0.012)).build(
         f"Nameplate_{text[:24].replace(' ', '_')}", mat or m["nameplate"], frame)
     flat_text(f"Lettering_{text[:24].replace(' ', '_')}", text, m["lettering"], (-0.0045, -r, z - size * 0.36),
@@ -134,26 +193,30 @@ def nameplate(frame, text, r, z, size=0.012, width=None, mat=None):
 
 def bezel(frame, name, r, z, w, h, depth=0.025, lip=0.012):
     """Black rectangular meter bezel standing proud of the panel, open at the front."""
-    m = mats()
-    mb = MeshBuilder()
+    mb = _builder(frame, "bezel")
     # four lips around a recessed face
     mb.box((-depth / 2, -r - w / 2 + lip / 2, z), (depth, lip, h))
     mb.box((-depth / 2, -r + w / 2 - lip / 2, z), (depth, lip, h))
     mb.box((-depth / 2, -r, z + h / 2 - lip / 2), (depth, w - 2 * lip, lip))
     mb.box((-depth / 2, -r, z - h / 2 + lip / 2), (depth, w - 2 * lip, lip))
     mb.box((-0.004, -r, z), (0.008, w, h))  # back plate
-    return mb.build(f"Bezel_{name}", m["bezel"], frame, bevel=0.002)
+    return _finish(mb, f"Bezel_{name}", "bezel", frame, bevel=0.002)
 
 
 def meter(frame, name, r, z, w=0.07, h=0.17, *, tag, lo=0.0, hi=100.0, unit="", legend="",
           red=None, log=0, kind="meter", label=None):
     """A GE edgewise vertical meter (default) or a round process meter (kind="round")."""
     m = mats()
+    claim(frame, r, z, w, h)
     bezel(frame, name, r, z, w, h, depth=0.03 if kind == "meter" else 0.04)
     face = _face_quad(f"ui_{name}", frame, r, z, w - 0.024, h - 0.024, m["face"], stand=0.009,
                       face=kind, tag=tag, lo=lo, hi=hi, unit=unit, legend=legend or name, red=red, log=log,
                       label=label or f"{legend or name} meter")
-    _face_quad(f"Glass_{name}", frame, r, z, w - 0.02, h - 0.02, m["glass"], stand=0.028)
+    if _batch is not None and _batch[0] is frame:
+        y0, y1, z0, z1 = -r - (w - 0.02) / 2, -r + (w - 0.02) / 2, z - (h - 0.02) / 2, z + (h - 0.02) / 2
+        _builder(frame, "glass")._add([(-0.028, y1, z0), (-0.028, y0, z0), (-0.028, y0, z1), (-0.028, y1, z1)], [(0, 1, 2, 3)])
+    else:
+        _face_quad(f"Glass_{name}", frame, r, z, w - 0.02, h - 0.02, m["glass"], stand=0.028)
     return face
 
 
@@ -161,6 +224,7 @@ def recorder(frame, name, r, z, w=0.30, h=0.36, *, tags, lo, hi, unit="", legend
     """A strip-chart recorder: a black case with a chart window and pen indicators. ``tags`` lists
     one to three readings drawn as pens (red, green, blue)."""
     m = mats()
+    claim(frame, r, z, w, h)
     mb = MeshBuilder()
     mb.box((-0.03, -r, z), (0.06, w, h))
     case = mb.build(f"Recorder_{name}", m["bezel"], frame, bevel=0.003)
@@ -180,6 +244,7 @@ def digital(frame, name, r, z, w=0.12, h=0.045, *, tag, digits=4, unit="", legen
     """Numeric display behind a dark window: red LED (rod position, timers), green (the core
     display readout) or blue (the keypad displays of the later digital additions)."""
     m = mats()
+    claim(frame, r, z, w, h)
     bezel(frame, name, r, z, w, h, depth=0.012, lip=0.006)
     mat = {"red": "led", "green": "led_green", "blue": "led_blue"}[colour]
     return _face_quad(f"ui_{name}", frame, r, z, w - 0.012, h - 0.012, m[mat], stand=0.004,
@@ -190,6 +255,7 @@ def digital(frame, name, r, z, w=0.12, h=0.045, *, tag, digits=4, unit="", legen
 def keypad_display(frame, name, r, z, *, tag, digits, legend, label=None):
     """Blue digital display with a small keypad under it, as added to the boards later."""
     m = mats()
+    claim(frame, r, z - 0.03, 0.16, 0.14)
     MeshBuilder().box((-0.010, -r, z - 0.03), (0.020, 0.16, 0.14)).build(f"Keypad_{name}", m["screen_case"], frame, bevel=0.002)
     face = digital(frame, name, r, z + 0.02, w=0.14, h=0.05, tag=tag, digits=digits, legend=legend, label=label, colour="blue")
     keys = MeshBuilder()
@@ -203,7 +269,10 @@ def square_button(frame, name, r, z, colour="green", *, role, label, lamp_tag=""
     """Square illuminated pushbutton (red/green/white lens in a black bezel), the kind that sits
     in dense rows on the pump and valve sections. Lights from ``lamp_tag``."""
     m = mats()
-    MeshBuilder().box((-0.006, -r, z), (0.012, size + 0.008, size + 0.008)).build(f"Bezel_{name}", m["bezel"], frame)
+    claim(frame, r, z, size + 0.008, size + 0.008)
+    bz = _builder(frame, "bezel")
+    bz.box((-0.006, -r, z), (0.012, size + 0.008, size + 0.008))
+    _finish(bz, f"Bezel_{name}", "bezel", frame)
     ob = MeshBuilder().box((-0.016, -r, z), (0.012, size, size)).build(f"ui_{name}", m[f"sqbtn_{colour}"], frame, bevel=0.0015)
     return _props(ob, role=role, label=label, face="lamp", lamp=lamp_tag, colour=colour if colour != "white" else "white")
 
@@ -212,6 +281,7 @@ def flat_screen(frame, name, r, z, w=0.42, h=0.30, *, tag="aprm", legend="PLANT 
     """One of the few flat-panel displays let into the analog boards: a thin beige case
     with a dark screen the page draws a trend on."""
     m = mats()
+    claim(frame, r, z, w + 0.04, h + 0.05)
     MeshBuilder().box((-0.015, -r, z), (0.03, w + 0.04, h + 0.05)).build(f"Screen_{name}", m["screen_case"], frame, bevel=0.003)
     return _face_quad(f"ui_{name}", frame, r, z, w, h, m["screen"], stand=0.031, face="screen", tag=tag, legend=legend,
                       label=f"{legend} display")
@@ -232,9 +302,11 @@ def stencil_plate(frame, text, r, z, size=0.045):
 def lamp(frame, name, r, z, colour="red", *, tag, radius=0.011, label=None):
     """Indicating light: a short chrome collar with a coloured lens."""
     m = mats()
-    MeshBuilder().cylinder((-0.012, -r, z), radius + 0.004, 0.012, 18, axis="x").build(
-        f"Collar_{name}", m["escutcheon"], frame)
-    lens = MeshBuilder().cylinder((-0.020, -r, z), radius, 0.008, 18, axis="x").build(
+    claim(frame, r, z, 2 * radius + 0.008, 2 * radius + 0.008)
+    mb = _builder(frame, "escutcheon")
+    mb.cylinder((-0.012, -r, z), radius + 0.004, 0.012, _segs(18), axis="x")
+    _finish(mb, f"Collar_{name}", "escutcheon", frame)
+    lens = MeshBuilder().cylinder((-0.020, -r, z), radius, 0.008, _segs(18), axis="x").build(
         f"ui_{name}", m[f"lamp_{colour}"], frame)
     return _props(lens, face="lamp", lamp=tag, colour=colour, label=label)
 
@@ -242,6 +314,7 @@ def lamp(frame, name, r, z, colour="red", *, tag, radius=0.011, label=None):
 def pushbutton(frame, name, r, z, colour="black", *, role, label, radius=0.011, collar=None, mushroom=False):
     """Momentary pushbutton. A scram button gets a mushroom head on a yellow collar."""
     m = mats()
+    claim(frame, r, z, 2 * radius + 0.012, 2 * radius + 0.012)
     MeshBuilder().cylinder((-0.010, -r, z), radius + 0.006, 0.010, 20, axis="x").build(
         f"Ring_{name}", m[collar or "escutcheon"], frame)
     mb = MeshBuilder()
@@ -260,13 +333,16 @@ def control_switch(frame, name, r, z, *, role, label, positions, tag=None, light
     red/green indicating lights above it. ``positions`` names the handle positions left to
     right; ``tag`` is the reading that picks the handle's resting position."""
     m = mats()
-    MeshBuilder().cylinder((-0.008, -r, z), radius, 0.008, 28, axis="x").build(
-        f"Escutcheon_{name}", m["escutcheon"], frame)
+    top = z + radius + 0.04 if lights else z + radius
+    claim(frame, r, (top + z - 0.058) / 2, max(2 * radius, len(lights) * 0.034 + 0.01), top - (z - 0.058))
+    esc = _builder(frame, "escutcheon")
+    esc.cylinder((-0.008, -r, z), radius, 0.008, _segs(28), axis="x")
+    _finish(esc, f"Escutcheon_{name}", "escutcheon", frame)
     mb = MeshBuilder()
-    mb.cylinder((-0.030, -r, z), 0.010, 0.024, 16, axis="x")                    # shaft
+    mb.cylinder((-0.030, -r, z), 0.010, 0.024, _segs(16), axis="x")             # shaft
     mb.box((-0.040, -r, z - 0.012), (0.022, 0.016, 0.060))                      # pistol grip, hanging down
-    mb.sphere((-0.040, -r, z - 0.044), 0.011, 12, 6)
-    ob = mb.build(f"ui_{name}", m["handle"], frame, bevel=0.002)
+    mb.sphere((-0.040, -r, z - 0.044), 0.011, _segs(12), 6 if _batch is None else 4)
+    ob = mb.build(f"ui_{name}", m["handle"], frame, bevel=0.002 if _batch is None else 0.0)
     _props(ob, role=role, label=label, positions=",".join(positions), tag=tag, spring=1 if spring else 0,
            pivot_z=z, pivot_y=-r)
     if lights:
@@ -279,6 +355,7 @@ def control_switch(frame, name, r, z, *, role, label, positions, tag=None, light
 def keyswitch(frame, name, r, z, *, role, label, positions, tag):
     """Keylock selector (the reactor mode switch): a big escutcheon with a chrome key barrel."""
     m = mats()
+    claim(frame, r, z, 0.10, 0.10)
     MeshBuilder().cylinder((-0.010, -r, z), 0.045, 0.010, 32, axis="x").build(
         f"Escutcheon_{name}", m["escutcheon"], frame)
     mb = MeshBuilder()
@@ -295,6 +372,7 @@ def ma_station(frame, name, r, z, *, tag, setpoint_tag, lo, hi, unit, legend, ro
     lower pushbuttons and an auto/manual button with its lights."""
     m = mats()
     w, h = 0.09, 0.22
+    claim(frame, r, z - 0.01, 0.10, 0.25)
     MeshBuilder().box((-0.015, -r, z), (0.03, w, h)).build(f"MA_{name}", m["bezel"], frame, bevel=0.002)
     _face_quad(f"ui_{name}", frame, r, z + 0.045, w - 0.02, 0.11, m["face"], stand=0.032,
                face="ma", tag=tag, lo=lo, hi=hi, unit=unit, legend=legend, setpoint=setpoint_tag, label=label)
@@ -309,6 +387,7 @@ def thumbwheel(frame, name, r, z, *, tag, digits, legend, role_up, role_down, la
     """Digital set point thumbwheel with raise/lower buttons beside it."""
     m = mats()
     w = 0.018 * digits + 0.02
+    claim(frame, r, z, w + 0.08, 0.05)
     MeshBuilder().box((-0.008, -r, z), (0.016, w + 0.03, 0.045)).build(f"TW_{name}", m["bezel"], frame)
     _face_quad(f"ui_{name}", frame, r, z, w, 0.028, m["thumbwheel"], stand=0.017,
                face="thumbwheel", tag=tag, digits=digits, legend=legend, label=label)
@@ -342,6 +421,7 @@ def core_display(frame, name, r, z, size=0.62):
     """The full core display: a black panel ruled into a line grid with one red-lit module per
     control rod, the "FULL CORE DISPLAY" plate above and the green digital readout over that."""
     m = mats()
+    claim(frame, r, z, size + 0.06, size + 0.06)
     MeshBuilder().box((-0.012, -r, z), (0.024, size + 0.06, size + 0.06)).build(f"Frame_{name}", m["bezel"], frame, bevel=0.003)
     nameplate(frame, "FULL CORE DISPLAY", r, z + size / 2 + 0.065, size=0.020, width=0.40)
     digital(frame, f"{name}_Readout", r, z + size / 2 + 0.13, w=0.30, h=0.06, tag="rod_position_readout", digits=8,
@@ -352,6 +432,111 @@ def core_display(frame, name, r, z, size=0.62):
 
 def rod_select_matrix(frame, name, r, z, size=0.40):
     m = mats()
+    claim(frame, r, z, size + 0.03, size + 0.03)
     MeshBuilder().box((-0.010, -r, z), (0.020, size + 0.03, size + 0.03)).build(f"Frame_{name}", m["bezel"], frame, bevel=0.003)
     return _face_quad(f"ui_{name}", frame, r, z, size, size, m["face"], stand=0.022,
                       face="rodselect", tag="rod_select", role="rod_select", label="Rod select matrix: pick a control rod")
+
+
+
+# ----------------------------------------------------------------------------- filling the boards
+# The real boards are packed: wherever a system's main indications leave room there are more
+# edgewise meters (redundant channels, pump and heater indications) and long rows of valve
+# control switches, each with its red/green lights. These fillers pack a band of a panel with
+# them, skipping anything already placed; every one still shows a live plant reading.
+
+def fill_meters(frame, prefix, r0, r1, z, items, *, w=0.058, h=0.15, pitch=0.068, group=6, gap=0.05):
+    """A band of small edgewise meters from r0 to r1 at height z, in groups of ``group`` with a
+    ``gap`` between groups. ``items`` cycles through (tag, lo, hi, unit, legend) and each meter
+    gets a channel suffix (A, B, C ...) so redundant indications read as such."""
+    with batched(frame, prefix):
+        return _fill_meters(frame, prefix, r0, r1, z, items, w, h, pitch, group, gap)
+
+
+def _fill_meters(frame, prefix, r0, r1, z, items, w, h, pitch, group, gap):
+    placed, i, r = 0, 0, r0 + w / 2
+    count: dict[str, int] = {}
+    while r + w / 2 <= r1:
+        if is_free(frame, r, z, w, h):
+            tag, lo, hi, unit, legend = items[i % len(items)]
+            k = count.get(legend, 0)
+            count[legend] = k + 1
+            meter(frame, f"{prefix}_M{placed}", r, z, w=w, h=h, tag=tag, lo=lo, hi=hi, unit=unit,
+                  legend=f"{legend} {'ABCDEFGH'[k % 8]}")
+            placed += 1
+            i += 1
+            r += pitch + (gap if placed % group == 0 else 0.0)
+        else:
+            r += 0.02
+    return placed
+
+
+def fill_switches(frame, prefix, r0, r1, z, items, *, pitch=0.082, radius=0.017, plate=None):
+    """A row of valve or breaker control switches (pistol grip, CLOSE / OPEN, red over green
+    lights) from r0 to r1 at height z. ``items`` cycles through (label, tag_open, tag_closed):
+    the handle and lights follow those lamp readings. ``plate`` names the row on a nameplate."""
+    with batched(frame, prefix):
+        placed, first, r = _fill_switches(frame, prefix, r0, r1, z, items, pitch, radius)
+    if plate and placed:
+        nameplate(frame, plate, (first + r - pitch) / 2, z - 0.085, size=0.009)
+    return placed
+
+
+def _fill_switches(frame, prefix, r0, r1, z, items, pitch, radius):
+    placed, i, r = 0, 0, r0 + 0.04
+    w, hgt, zc = 0.078, radius + 0.098, z + (radius + 0.04 - 0.058) / 2
+    first = None
+    while r + 0.04 <= r1:
+        if is_free(frame, r, zc, w, hgt):
+            label, t_open, t_closed = items[i % len(items)]
+            n = i // len(items) + 1
+            control_switch(frame, f"{prefix}_S{placed}", r, z, role="info", label=f"{label} {n}: close / open",
+                           positions=["CLOSE", "", "OPEN"], tag=t_open, light_tags=(t_open, t_closed),
+                           spring=False, radius=radius)
+            first = r if first is None else first
+            placed += 1
+            i += 1
+            r += pitch
+        else:
+            r += 0.02
+    return placed, first, r
+
+
+def fill_square_buttons(frame, prefix, r0, r1, z, items, *, pitch=0.036, size=0.024):
+    """Two rows of square illuminated pushbuttons (red over green) from r0 to r1 at z."""
+    with batched(frame, prefix):
+        return _fill_square_buttons(frame, prefix, r0, r1, z, items, pitch, size)
+
+
+def _fill_square_buttons(frame, prefix, r0, r1, z, items, pitch, size):
+    placed, i, r = 0, 0, r0 + size
+    while r + size <= r1:
+        if is_free(frame, r, z, size + 0.01, 2 * size + 0.04):
+            label, t_on, t_off = items[i % len(items)]
+            square_button(frame, f"{prefix}_B{placed}R", r, z + size * 0.62, "red", role="info", label=f"{label}: on", lamp_tag=t_on, size=size)
+            square_button(frame, f"{prefix}_B{placed}G", r, z - size * 0.62, "green", role="info", label=f"{label}: off", lamp_tag=t_off, size=size)
+            placed += 1
+            i += 1
+            r += pitch
+        else:
+            r += 0.02
+    return placed
+
+
+def panel_seams(frame, name, width, z0, z1, every=0.92):
+    """Bolted section seams and the screw heads along them, as the GE boards are built of
+    narrow sections bolted side by side."""
+    m = mats()
+    mb = MeshBuilder()
+    screws = MeshBuilder()
+    n = max(1, int(width / every))
+    step = width / n
+    for k in range(1, n):
+        r = -width / 2 + k * step
+        mb.box((-0.0015, -r, (z0 + z1) / 2), (0.003, 0.004, z1 - z0))
+        for zz in (z0 + 0.04, (z0 + z1) / 2, z1 - 0.04):
+            screws.cylinder((-0.003, -r - 0.012, zz), 0.0035, 0.003, 8, axis="x")
+            screws.cylinder((-0.003, -r + 0.012, zz), 0.0035, 0.003, 8, axis="x")
+    if mb.verts:
+        mb.build(f"{name}_Seams", m["panel_dark"], frame)
+        screws.build(f"{name}_Screws", m["chrome"], frame)

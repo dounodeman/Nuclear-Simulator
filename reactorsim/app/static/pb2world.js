@@ -140,6 +140,7 @@ export class RoomWorld {
         this.switches.push({ mesh: o, ud, pivot: new THREE.Vector3(0, ud.pivot_z, -ud.pivot_y), n: ud.positions.split(",").length });
       }
       if (o.material?.name === "PB_LightFixture") o.material.emissiveIntensity = 0.55;
+      if (o.material?.name === "PB_Ceiling" || o.material?.name === "PB_Carpet") surfaceTexture(o, o.material.name === "PB_Ceiling");
       if (o.material?.name === "PB_Ceiling") o.material.emissiveIntensity = 0.35;
     });
     this.renderer.setAnimationLoop(() => this._frame());
@@ -163,10 +164,11 @@ export class RoomWorld {
     g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
     mesh.geometry = g;
     const w = z1 - z0, h = y1 - y0;
-    const scale = ud.face === "ann" || ud.face === "core" || ud.face === "rodselect" || ud.face === "drawing" ? 1400 : 2600;
+    // pixels per metre: fine enough to read the engraving from the operator's stool
+    const scale = { ann: 2300, core: 2600, rodselect: 2000, drawing: 1600, screen: 2000 }[ud.face] || 3600;
     const cv = document.createElement("canvas");
-    cv.width = Math.min(1536, Math.max(96, Math.round(w * scale)));
-    cv.height = Math.min(1536, Math.max(96, Math.round(h * scale)));
+    cv.width = Math.min(2048, Math.max(128, Math.round(w * scale)));
+    cv.height = Math.min(2048, Math.max(128, Math.round(h * scale)));
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
@@ -376,9 +378,11 @@ export class RoomWorld {
       sw.mesh.position.copy(sw.pivot).sub(p);
     }
     for (const f of this.faces) {
-      if (f.ud.face === "drawing" && f.drawn) continue;   // the laminated drawings never change
+      // redraw a face only when what it shows has changed: hundreds of meters sit still at power
+      const sig = SIG[f.ud.face] ? SIG[f.ud.face](f.ud, r, L, ann, s, blink) : s.time_s;
+      if (f.drawn && sig === f.sig) continue;
       const d = DRAW[f.ud.face];
-      if (d) { d(f, r, L, ann, s, hist, blink); f.tex.needsUpdate = true; f.drawn = true; }
+      if (d) { d(f, r, L, ann, s, hist, blink); f.tex.needsUpdate = true; f.drawn = true; f.sig = sig; }
     }
   }
 }
@@ -789,6 +793,67 @@ function drawClock(f, r, L, ann, s) {
   hand(((t / 3600) % 12) / 12, 0.55, 5);
   hand(((t / 60) % 60) / 60, 0.8, 4);
   hand((t % 60) / 60, 0.85, 1.5, "#c81e14");
+}
+
+// What each kind of face depends on, so update() can skip faces that would draw the same.
+const q = (v) => (typeof v === "number" ? v.toPrecision(4) : String(v));
+const SIG = {
+  meter: (ud, r) => q(r[ud.tag]),
+  round: (ud, r) => q(r[ud.tag]),
+  digital: (ud, r, L, ann, s) => `${q(r[ud.tag])}|${r.rod_selected}|${q(r.rod_notch)}|${s.scrammed}`,
+  ma: (ud, r, L) => `${q(r[ud.tag])}|${q(r[ud.setpoint])}|${L[`${ud.tag}_auto`]}`,
+  thumbwheel: (ud, r) => q(r[ud.tag]),
+  ann: (ud, r, L, ann, s, blink) => {
+    const keys = String(ud.keys).split("|");
+    const st = keys.map((k) => (ann.__test__ ? "t" : ann[k] || "")).join(",");
+    return st.includes("flash") ? `${st}|${blink}` : st;
+  },
+  core: (ud, r, L, ann, s) => `${q(r.rod_notch)}|${r.rod_selected}|${s.scrammed}`,
+  rodselect: (ud, r) => String(r.rod_selected),
+  drawing: () => "static",
+  clock: (ud, r, L, ann, s) => String(Math.floor(s.time_s)),
+};
+
+// The luminous ceiling's perforated panels and the cut-pile carpet: canvas textures repeated
+// across the room, mapped from the mesh's own plan coordinates (the export has no UVs).
+const SURFACE = {};
+function surfaceTexture(mesh, ceiling) {
+  const key = ceiling ? "ceiling" : "carpet";
+  if (!SURFACE[key]) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 256;
+    const g = cv.getContext("2d");
+    if (ceiling) {
+      g.fillStyle = "#f6f6f2"; g.fillRect(0, 0, 256, 256);
+      g.fillStyle = "#c9c9c2";
+      for (let y = 4; y < 256; y += 8) for (let x = 4 + ((y / 8) % 2) * 4; x < 256; x += 8) { g.beginPath(); g.arc(x, y, 1.3, 0, Math.PI * 2); g.fill(); }
+    } else {
+      g.fillStyle = "#7a2a33"; g.fillRect(0, 0, 256, 256);
+      let seed = 7;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (let i = 0; i < 9000; i++) {
+        const v = rnd();
+        g.fillStyle = v < 0.5 ? "rgba(40,6,12,0.35)" : "rgba(170,80,90,0.25)";
+        g.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
+      }
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 8;
+    SURFACE[key] = tex;
+  }
+  const g = mesh.geometry;
+  const p = g.attributes.position;
+  const tile = ceiling ? 1.0 : 0.5;   // metres per texture repeat (one ceiling panel)
+  const uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) { uv[2 * i] = p.getX(i) / tile; uv[2 * i + 1] = p.getZ(i) / tile; }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  mesh.material = mesh.material.clone();
+  mesh.material.map = SURFACE[key];
+  if (ceiling) { mesh.material.emissiveMap = SURFACE[key]; }
+  else mesh.material.color.setHex(0xffffff);
+  mesh.material.needsUpdate = true;
 }
 
 const DRAW = {

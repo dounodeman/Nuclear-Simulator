@@ -26,9 +26,10 @@ import math
 from models.pur1.common import MeshBuilder, box, empty, flat_text
 from models.peach_bottom import panels as P
 from models.peach_bottom.panels import (ANN_COL_W, annunciator_box, control_switch, core_display, digital,
-                                        document_pocket, face_frame, flat_screen, keypad_display, keyswitch, lamp,
-                                        ma_station, meter, nameplate, pushbutton, recorder, rod_select_matrix,
-                                        square_button, stencil_plate, thumbwheel)
+                                        document_pocket, face_frame, fill_meters, fill_square_buttons, fill_switches,
+                                        flat_screen, keypad_display, keyswitch, lamp, ma_station, meter, nameplate,
+                                        panel_seams, pushbutton, recorder, rod_select_matrix, square_button,
+                                        stencil_plate, thumbwheel)
 
 ROOM_X = (-10.0, 10.0)
 ROOM_Y = (-7.5, 7.5)
@@ -83,7 +84,8 @@ def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_
         trim.box((-0.004, y, PANEL_H / 2 + 0.02), (0.008, 0.03, PANEL_H + 0.04))
     trim.box((-0.004, 0, PANEL_H + 0.015), (0.008, W + 0.03, 0.03))
     trim.build(f"{name}_Trim", m["panel_dark"], root)
-    frames = {"root": root, "vert": face_frame(f"{name}_VertFrame", root, (0, 0, 0))}
+    frames = {"root": root, "vert": face_frame(f"{name}_VertFrame", root, (0, 0, 0)), "width": W}
+    panel_seams(frames["vert"], f"{name}_Vert", W, BENCH_HIGH if with_bench else 0.05, PANEL_H - 0.02)
     if with_bench:
         x0, x1 = -BENCH_DEPTH, 0.0
         v = [(x0, -W / 2, 0), (x1, -W / 2, 0), (x1, W / 2, 0), (x0, W / 2, 0),
@@ -97,6 +99,10 @@ def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_
         box(f"{name}_Ledge", (x0 + 0.03, 0, BENCH_LOW + 0.012), (0.09, W, 0.024), m["panel_dark"], root)
         theta = math.atan2(BENCH_DEPTH, BENCH_HIGH - BENCH_LOW)        # tip of the bench frame
         frames["bench"] = face_frame(f"{name}_BenchFrame", root, ((x0 + x1) / 2, 0, (BENCH_LOW + BENCH_HIGH) / 2 + 0.002), pitch=theta)
+        panel_seams(frames["bench"], f"{name}_Bench", W, -0.35, 0.35)
+        # chrome nosing along the bench's front edge and a black rubber bumper under it
+        box(f"{name}_Nosing", (x0 + 0.004, 0, BENCH_LOW + 0.027), (0.012, W, 0.006), m["chrome"], root)
+        box(f"{name}_Bumper", (x0 - 0.004, 0, BENCH_LOW - 0.03), (0.016, W, 0.05), m["handle"], root)
         # the console front under the bench: stencilled panel numbers and document pockets
         front_frame = face_frame(f"{name}_FrontFrame", root, (x0, 0, 0))
         frames["front"] = front_frame
@@ -617,27 +623,112 @@ def _chair(parent, m, origin, name, facing, tall=False):
     fr.build(f"{name}_Frame", m["chrome"], root)
 
 
+# What packs the empty space on each board (fillers in panels.py): meters as (tag, lo, hi, unit,
+# legend), switches and square buttons as (label, lamp when open/on, lamp when closed/off).
+DENSE = {
+    "P603": dict(
+        meters=[("pressure", 0, 1500, "psig", "RX PRESS"), ("level", 0, 60, "in", "RX LEVEL NR"),
+                ("feed_flow", 0, 20, "Mlb/h", "FW FLOW"), ("msl_flow", 0, 5, "Mlb/h", "MS LINE FLOW"),
+                ("recirc_flow_a", 0, 50, "Mlb/h", "RECIRC LOOP A"), ("recirc_flow_b", 0, 50, "Mlb/h", "RECIRC LOOP B"),
+                ("core_dp", 0, 30, "psid", "CORE PLATE dP"), ("feed_temp", 0, 500, "F", "FW TEMP"),
+                ("aprm", 0, 125, "%", "APRM"), ("irm", 0, 125, "%", "IRM")],
+        switches=[("Feedwater inlet valve", "feed_run", "feed_stopped"),
+                  ("Recirc pump A discharge valve", "recirc_a_run", "recirc_a_stopped"),
+                  ("Recirc pump B discharge valve", "recirc_b_run", "recirc_b_stopped"),
+                  ("Main steam line drain valve", "msiv_open", "msiv_closed")],
+        buttons=[("Recirc MG set A lube oil pump", "recirc_a_run", "recirc_a_stopped"),
+                 ("Recirc MG set B lube oil pump", "recirc_b_run", "recirc_b_stopped"),
+                 ("Heater drain pump", "feed_run", "feed_stopped")],
+        plate="REACTOR AUXILIARY VALVES"),
+    "P601": dict(
+        meters=[("hpci_flow", 0, 6000, "gpm", "HPCI FLOW"), ("rcic_flow", 0, 800, "gpm", "RCIC FLOW"),
+                ("lpci_flow_a", 0, 12000, "gpm", "RHR FLOW"), ("cs_flow_a", 0, 8000, "gpm", "CS FLOW"),
+                ("torus_temp", 0, 250, "F", "TORUS TEMP"), ("drywell_pressure", -5, 80, "psig", "DW PRESS"),
+                ("level", -300, 60, "in", "FUEL ZONE LVL"), ("pressure", 0, 1500, "psig", "RX PRESS")],
+        switches=[("HPCI steam supply valve", "hpci_run", "hpci_stopped"),
+                  ("RCIC steam supply valve", "rcic_run", "rcic_stopped"),
+                  ("Core spray injection valve", "cs_run", "cs_stopped"),
+                  ("RHR LPCI injection valve", "lpci_run", "lpci_stopped"),
+                  ("Outboard MSIV", "msiv_open", "msiv_closed")],
+        buttons=[("RHR service water pump", "lpci_run", "lpci_stopped"),
+                 ("Core spray room cooler", "cs_run", "cs_stopped"),
+                 ("HPCI auxiliary oil pump", "hpci_run", "hpci_stopped")],
+        plate="ECCS VALVES   CLOSE - OPEN"),
+    "P653": dict(
+        meters=[("msl_flow", 0, 5, "Mlb/h", "MS LINE FLOW"), ("turbine_speed", 0, 2000, "rpm", "TURB SPEED"),
+                ("vacuum", 0, 30, "in Hg", "COND VACUUM"), ("first_stage", 0, 800, "psig", "1ST STAGE"),
+                ("hotwell_level", 0, 60, "in", "HOTWELL LVL"), ("rfpt_speed", 0, 6000, "rpm", "RFPT SPEED"),
+                ("rfp_flow", 0, 10, "Mlb/h", "RFP FLOW"), ("tcv", 0, 100, "%", "CV POSITION"),
+                ("bypass", 0, 100, "%", "BPV POSITION"), ("gen_mw", 0, 1200, "MWe", "GEN MW")],
+        switches=[("Turbine stop valve test", "tsv_open", "tsv_closed"),
+                  ("Feed pump discharge valve", "feed_run", "feed_stopped"),
+                  ("Extraction steam valve", "turbine_latched", "turbine_tripped"),
+                  ("Unit auxiliary breaker", "gen_breaker", "gen_breaker_open")],
+        buttons=[("Condensate booster pump", "feed_run", "feed_stopped"),
+                 ("Turbine bearing lift pump", "turbine_latched", "turbine_tripped"),
+                 ("Circulating water pump", "condenser_avail", "condenser_low")],
+        plate="TURBINE AUXILIARY VALVES"),
+    "P602": dict(
+        meters=[("torus_temp", 0, 250, "F", "TORUS TEMP"), ("drywell_temp", 0, 350, "F", "DW TEMP"),
+                ("drywell_h2", 0, 10, "%", "DW H2"), ("torus_level", -10, 10, "in", "TORUS LVL"),
+                ("torus_pressure", -5, 80, "psig", "TORUS PRESS"), ("rhr_hx", 0, 12000, "gpm", "RHR HX FLOW")],
+        switches=[("RHR heat exchanger valve", "lpci_run", "lpci_stopped"),
+                  ("Containment isolation valve", "msiv_open", "msiv_closed")],
+        plate="CONTAINMENT ISOLATION"),
+    "P652": dict(
+        meters=[("bus_4kv", 0, 5, "kV", "4 kV BUS"), ("dc_bus", 0, 150, "V", "125 V DC"),
+                ("diesel_kw", 0, 4000, "kW", "DG LOAD"), ("gen_kv", 0, 30, "kV", "GEN VOLTS"),
+                ("grid_kv", 0, 600, "kV", "500 kV LINE")],
+        switches=[("4 kV feeder breaker", "gen_breaker", "gen_breaker_open")],
+        plate="4 kV BREAKERS   TRIP - CLOSE"),
+}
+
+
+def densify(name, fr):
+    """Pack the free space of one board the way the photos show it: meter banks between the
+    main indications, a long row of valve switches low on the vertical section and rows of
+    square illuminated pushbuttons and more switches on the bench."""
+    d = DENSE[name]
+    v, W = fr["vert"], fr["width"]
+    r0, r1 = -W / 2 + 0.06, W / 2 - 0.06
+    if "bench" in fr:
+        for z in (1.92, 1.66):
+            fill_meters(v, f"{name}_Dense{int(z * 100)}", r0, r1, z, d["meters"])
+        fill_switches(v, f"{name}_Valves", r0, r1, 1.07, d["switches"], plate=d["plate"])
+        b = fr["bench"]
+        fill_square_buttons(b, f"{name}_SqBtns", r0, r1, -0.30, d["buttons"])
+        fill_switches(b, f"{name}_BenchSw", r0, r1, 0.17, d["switches"], radius=0.016, pitch=0.075)
+    else:   # full-height corner panels: meters down to waist height, switches below
+        for z in (1.85, 1.53, 1.22):
+            fill_meters(v, f"{name}_Dense{int(z * 100)}", r0, r1, z, d["meters"], group=4)
+        fill_switches(v, f"{name}_Valves", r0, r1, 0.98, d["switches"], plate=d["plate"])
+        fill_switches(v, f"{name}_Valves2", r0, r1, 0.72, d["switches"])
+
+
 def build_control_room(parent=None):
     """Whole room, ready to export."""
     root = parent or empty("PB2_ControlRoom")
+    P.reset_layout()
     build_room(root)
-    build_p603(root)
-    build_p601(root)
-    build_p653(root)
+    densify("P603", build_p603(root))
+    densify("P601", build_p601(root))
+    densify("P653", build_p653(root))
     c = 0.78
-    build_corner(root, "P602", (-3.6 - c, 4.0 - c, 0.0), 3 * math.pi / 4, "P602  RHR / CONTAINMENT", [
+    p602 = build_corner(root, "P602", (-3.6 - c, 4.0 - c, 0.0), 3 * math.pi / 4, "P602  RHR / CONTAINMENT", [
         ("P602_TorusT", "torus_temp", 0, 250, "F", "TORUS WATER TEMP"),
         ("P602_DWP", "drywell_pressure", -5, 80, "psig", "DRYWELL PRESSURE"),
         ("P602_DWT", "drywell_temp", 0, 350, "F", "DRYWELL TEMP"),
         ("P602_H2", "drywell_h2", 0, 10, "%", "DRYWELL H2"),
         ("P602_RHRHx", "rhr_hx", 0, 12000, "gpm", "RHR HX FLOW"),
     ], ann=ANN_P602)
-    build_corner(root, "P652", (3.6 + c, 4.0 - c, 0.0), math.pi / 4, "P652  STATION ELECTRICAL", [
+    densify("P602", p602)
+    p652 = build_corner(root, "P652", (3.6 + c, 4.0 - c, 0.0), math.pi / 4, "P652  STATION ELECTRICAL", [
         ("P652_4kV_A", "bus_4kv", 0, 5, "kV", "4 kV BUS A"),
         ("P652_4kV_B", "bus_4kv", 0, 5, "kV", "4 kV BUS B"),
         ("P652_DG", "diesel_kw", 0, 4000, "kW", "DIESEL GEN LOAD"),
         ("P652_125V", "dc_bus", 0, 150, "V", "125 V DC BUS"),
         ("P652_Grid", "grid_kv", 0, 600, "kV", "500 kV SWITCHYARD"),
     ], ann=ANN_P652)
+    densify("P652", p652)
     build_back_panels(root)
     return root
