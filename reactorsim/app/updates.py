@@ -30,16 +30,29 @@ from reactorsim import _build
 
 REPO = "dounodeman/nuclear-simulator"
 API = f"https://api.github.com/repos/{REPO}"
-ASSET_NAME = "PUR-1-Simulator-macOS.zip"
-APP_NAME = "PUR-1 Simulator"
+ASSET_NAME = "NPSS-macOS.zip"
+APP_NAME = "NPSS"
+# The app was called "PUR-1 Simulator" before it grew past one reactor. Releases still carry
+# the zip under the old name too, so installs from then can update, and their settings move over.
+LEGACY_ASSET_NAME = "PUR-1-Simulator-macOS.zip"
+LEGACY_APP_NAME = "PUR-1 Simulator"
+
+
+def _config_base() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 
 
 def settings_dir() -> Path:
-    if sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return base / APP_NAME
+    base = _config_base()
+    new, old = base / APP_NAME, base / LEGACY_APP_NAME
+    if not new.exists() and old.is_dir():
+        try:
+            old.rename(new)
+        except OSError:
+            return old
+    return new
 
 
 def _settings_path() -> Path:
@@ -156,7 +169,8 @@ def check(timeout: float = 10.0) -> UpdateInfo:
 
 def info_from_release(rel: dict, current: int) -> UpdateInfo:
     latest = parse_build(rel.get("tag_name", ""))
-    asset = next((a for a in rel.get("assets", []) if a.get("name") == ASSET_NAME), None)
+    assets = {a.get("name"): a for a in rel.get("assets", [])}
+    asset = assets.get(ASSET_NAME) or assets.get(LEGACY_ASSET_NAME)
     info = UpdateInfo("up_to_date", current, latest=latest, notes=(rel.get("body") or "")[:4000],
                       published=rel.get("published_at") or "",
                       asset_url=asset.get("url") if asset else None)
@@ -211,12 +225,15 @@ def install_and_relaunch(info: UpdateInfo) -> None:
 
 _SWAP_SCRIPT = r"""#!/bin/sh
 # swap.sh PID NEW_APP OLD_APP WORKDIR
+# The new bundle keeps its own name, so an app renamed between builds is renamed on disk too.
 pid="$1"; new="$2"; old="$3"; work="$4"
+dest="$(dirname "$old")/$(basename "$new")"
 while kill -0 "$pid" 2>/dev/null; do sleep 0.3; done
 backup="$old.previous"
 rm -rf "$backup"
-mv "$old" "$backup" && mv "$new" "$old" || { mv "$backup" "$old" 2>/dev/null; open "$old"; exit 1; }
-xattr -dr com.apple.quarantine "$old" 2>/dev/null
+if [ "$dest" != "$old" ] && [ -e "$dest" ]; then dest="$old"; fi
+mv "$old" "$backup" && mv "$new" "$dest" || { mv "$backup" "$old" 2>/dev/null; open "$old"; exit 1; }
+xattr -dr com.apple.quarantine "$dest" 2>/dev/null
 rm -rf "$backup" "$work"
-open "$old"
+open "$dest"
 """

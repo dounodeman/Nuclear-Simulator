@@ -1,5 +1,5 @@
 name: macOS app
-# Builds "PUR-1 Simulator.app" on Apple silicon and, for main, publishes it as a GitHub
+# Builds "NPSS.app" on Apple silicon and, for main, publishes it as a GitHub
 # Release tagged build-<run number>. The installed app checks the latest release and updates
 # itself (reactorsim/app/updates.py).
 on:
@@ -30,7 +30,9 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 30
     env:
-      ASSET: PUR-1-Simulator-macOS.zip
+      ASSET: NPSS-macOS.zip
+      # Installs from before the rename look for this name; it is the same zip.
+      LEGACY_ASSET: PUR-1-Simulator-macOS.zip
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,14 +53,16 @@ jobs:
       - name: Icon
         run: python packaging/macos/make_icon.py
       - name: Package
-        run: pyinstaller packaging/macos/pur1.spec --noconfirm --distpath dist --workpath build
+        run: pyinstaller packaging/macos/npss.spec --noconfirm --distpath dist --workpath build
       - name: Smoke test the packaged app
-        run: '"dist/PUR-1 Simulator.app/Contents/MacOS/PUR-1 Simulator" --selftest'
+        run: '"dist/NPSS.app/Contents/MacOS/NPSS" --selftest'
       - name: Zip
-        run: ditto -c -k --keepParent "dist/PUR-1 Simulator.app" "$ASSET"
+        run: |
+          ditto -c -k --keepParent "dist/NPSS.app" "$ASSET"
+          cp "$ASSET" "$LEGACY_ASSET"
       - uses: actions/upload-artifact@v4
         with:
-          name: PUR-1-Simulator-macOS
+          name: NPSS-macOS
           path: ${{ env.ASSET }}
           retention-days: 14
       - name: Publish release
@@ -70,8 +74,8 @@ jobs:
           git log -1 --format='%s%n%n%b' > notes.txt
           echo "Commit ${GITHUB_SHA::7}" >> notes.txt
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ASSET" --clobber
+            gh release upload "$TAG" "$ASSET" "$LEGACY_ASSET" --clobber
           else
-            gh release create "$TAG" "$ASSET" --title "PUR-1 Simulator build ${{ github.run_number }}" \
+            gh release create "$TAG" "$ASSET" "$LEGACY_ASSET" --title "NPSS build ${{ github.run_number }}" \
               --notes-file notes.txt --target "$GITHUB_SHA" --latest
           fi
