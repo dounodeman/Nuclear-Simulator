@@ -16,10 +16,15 @@ Faces the interface draws live (scales, pointers, chart paper, lamps) are meshes
   role     what clicking it does (switches, buttons); label  the hover text
   lamp     the reading that lights a lamp; colour  "red" | "green" | "amber" | "white" | "blue"
 
-The real panels are GE "edgewise" vertical meters in black bezels, round Westinghouse-style
-process meters, Bailey/Foxboro M/A stations, GE SB-1 pistol-grip control switches with red
-(open/running) and green (closed/stopped) lights above them, and Honeywell/Leeds & Northrup
-strip-chart recorders, all on grey-green panels under rows of annunciator windows.
+The real panels (the project's reference photos of the Unit 2 side) are cream GE benchboards
+under a white luminous ceiling on maroon carpet: banks of GE "edgewise" vertical meters in
+black bezels, round process meters, Bailey/Foxboro M/A stations, black pistol-grip control
+switches with red (open/running) and green (closed/stopped) lights above them in dense rows,
+square red/green illuminated pushbuttons, blue keypad digital displays, strip-chart recorders
+and a few flat screens, with tall annunciator windows in lettered columns (A to J) and five
+numbered rows over each panel, each box carrying its numbered title plate (310 REACTOR,
+321 HPCI ...). Console fronts carry stencilled panel-number plates and yellow-tabbed
+document pockets.
 """
 from __future__ import annotations
 
@@ -38,9 +43,9 @@ def mats() -> dict[str, bpy.types.Material]:
         return _mats
     _mats.clear()
     _mats.update({
-        "panel": material("PB_PanelGreyGreen", (0.52, 0.58, 0.54), rough=0.55),
-        "panel_dark": material("PB_PanelTrim", (0.30, 0.33, 0.32), rough=0.5, metal=0.2),
-        "bench_top": material("PB_BenchTop", (0.56, 0.60, 0.57), rough=0.5),
+        "panel": material("PB_PanelCream", (0.86, 0.82, 0.66), rough=0.5),
+        "panel_dark": material("PB_PanelTrim", (0.22, 0.22, 0.21), rough=0.5, metal=0.2),
+        "bench_top": material("PB_BenchTop", (0.80, 0.76, 0.60), rough=0.5),
         "bezel": material("PB_Bezel", (0.07, 0.07, 0.07), rough=0.45),
         "face": material("PB_MeterFace", (0.93, 0.92, 0.86), rough=0.6),
         "chart": material("PB_ChartPaper", (0.96, 0.95, 0.90), rough=0.7),
@@ -59,20 +64,32 @@ def mats() -> dict[str, bpy.types.Material]:
         "lamp_amber": material("PB_LampAmber", (0.40, 0.25, 0.04), rough=0.3),
         "lamp_white": material("PB_LampWhite", (0.45, 0.45, 0.42), rough=0.3),
         "lamp_blue": material("PB_LampBlue", (0.06, 0.12, 0.40), rough=0.3),
-        "ann_box": material("PB_AnnunciatorBox", (0.22, 0.24, 0.23), rough=0.5, metal=0.2),
+        "ann_box": material("PB_AnnunciatorBox", (0.16, 0.16, 0.16), rough=0.5, metal=0.2),
         "ann_window": material("PB_AnnunciatorWindow", (0.85, 0.84, 0.78), rough=0.4),
         "led": material("PB_LEDDisplay", (0.06, 0.02, 0.02), rough=0.3),
+        "led_green": material("PB_LEDGreen", (0.02, 0.06, 0.02), rough=0.3),
+        "led_blue": material("PB_LEDBlue", (0.02, 0.03, 0.08), rough=0.3),
+        "screen": material("PB_Screen", (0.04, 0.05, 0.07), rough=0.2),
+        "screen_case": material("PB_ScreenCase", (0.78, 0.78, 0.74), rough=0.5),
+        "pocket": material("PB_DocPocket", (0.9, 0.9, 0.88), rough=0.3, alpha=0.35),
+        "pocket_tab": material("PB_DocPocketTab", (0.95, 0.76, 0.10), rough=0.6),
+        "sqbtn_red": material("PB_SquareRed", (0.55, 0.06, 0.04), rough=0.35),
+        "sqbtn_green": material("PB_SquareGreen", (0.05, 0.40, 0.12), rough=0.35),
+        "sqbtn_white": material("PB_SquareWhite", (0.80, 0.80, 0.76), rough=0.35),
+        "laminate": material("PB_Laminate", (0.93, 0.92, 0.86), rough=0.25),
         "keyswitch": material("PB_KeyChrome", (0.80, 0.80, 0.82), rough=0.25, metal=0.9),
         "thumbwheel": material("PB_Thumbwheel", (0.90, 0.90, 0.88), rough=0.5),
-        "floor": material("PB_FloorTile", (0.58, 0.56, 0.52), rough=0.5),
-        "wall": material("PB_Wall", (0.84, 0.82, 0.74), rough=0.9),
-        "ceiling": material("PB_Ceiling", (0.88, 0.88, 0.86), rough=0.9),
+        "floor": material("PB_Carpet", (0.24, 0.045, 0.07), rough=0.95),
+        "wall": material("PB_Wall", (0.86, 0.84, 0.76), rough=0.9),
+        "ceiling": material("PB_Ceiling", (0.97, 0.97, 0.95), rough=0.8, emit=(1.0, 1.0, 0.97), emit_strength=0.5),
+        "ceiling_grid": material("PB_CeilingGrid", (0.88, 0.88, 0.86), rough=0.7),
         "fixture": material("PB_LightFixture", (1.0, 1.0, 0.97), emit=(1.0, 1.0, 0.95), emit_strength=4.0),
         "desk": material("PB_DeskWood", (0.42, 0.30, 0.20), rough=0.6),
         "chair": material("PB_Chair", (0.15, 0.17, 0.22), rough=0.9),
         "chrome": material("PB_Chrome", (0.75, 0.76, 0.78), rough=0.3, metal=0.9),
-        "cabinet": material("PB_BackPanel", (0.50, 0.56, 0.53), rough=0.55),
-        "door": material("PB_Door", (0.45, 0.47, 0.50), rough=0.6, metal=0.2),
+        "cabinet": material("PB_BackPanel", (0.84, 0.80, 0.64), rough=0.55),
+        "door": material("PB_DoorRed", (0.60, 0.07, 0.07), rough=0.5),
+        "door_frame": material("PB_DoorFrame", (0.35, 0.35, 0.36), rough=0.5, metal=0.4),
         "phone": material("PB_Phone", (0.10, 0.10, 0.10), rough=0.5),
         "paper": material("PB_Paper", (0.95, 0.95, 0.92), rough=0.8),
         "binder": material("PB_Binder", (0.60, 0.15, 0.12), rough=0.7),
@@ -159,13 +176,57 @@ def recorder(frame, name, r, z, w=0.30, h=0.36, *, tags, lo, hi, unit="", legend
     return face
 
 
-def digital(frame, name, r, z, w=0.12, h=0.045, *, tag, digits=4, unit="", legend="", label=None):
-    """Red LED numeric display behind a dark window (rod position, rod select, timers)."""
+def digital(frame, name, r, z, w=0.12, h=0.045, *, tag, digits=4, unit="", legend="", label=None, colour="red"):
+    """Numeric display behind a dark window: red LED (rod position, timers), green (the core
+    display readout) or blue (the keypad displays of the later digital additions)."""
     m = mats()
     bezel(frame, name, r, z, w, h, depth=0.012, lip=0.006)
-    return _face_quad(f"ui_{name}", frame, r, z, w - 0.012, h - 0.012, m["led"], stand=0.004,
+    mat = {"red": "led", "green": "led_green", "blue": "led_blue"}[colour]
+    return _face_quad(f"ui_{name}", frame, r, z, w - 0.012, h - 0.012, m[mat], stand=0.004,
                       face="digital", tag=tag, digits=digits, unit=unit, legend=legend or name,
-                      label=label or legend or name)
+                      colour=colour, label=label or legend or name)
+
+
+def keypad_display(frame, name, r, z, *, tag, digits, legend, label=None):
+    """Blue digital display with a small keypad under it, as added to the boards later."""
+    m = mats()
+    MeshBuilder().box((-0.010, -r, z - 0.03), (0.020, 0.16, 0.14)).build(f"Keypad_{name}", m["screen_case"], frame, bevel=0.002)
+    face = digital(frame, name, r, z + 0.02, w=0.14, h=0.05, tag=tag, digits=digits, legend=legend, label=label, colour="blue")
+    keys = MeshBuilder()
+    for i in range(12):
+        keys.box((-0.024, -r + (i % 4 - 1.5) * 0.028, z - 0.04 - (i // 4) * 0.022), (0.008, 0.022, 0.016))
+    keys.build(f"Keys_{name}", m["button_black"], frame, bevel=0.001)
+    return face
+
+
+def square_button(frame, name, r, z, colour="green", *, role, label, lamp_tag="", size=0.026):
+    """Square illuminated pushbutton (red/green/white lens in a black bezel), the kind that sits
+    in dense rows on the pump and valve sections. Lights from ``lamp_tag``."""
+    m = mats()
+    MeshBuilder().box((-0.006, -r, z), (0.012, size + 0.008, size + 0.008)).build(f"Bezel_{name}", m["bezel"], frame)
+    ob = MeshBuilder().box((-0.016, -r, z), (0.012, size, size)).build(f"ui_{name}", m[f"sqbtn_{colour}"], frame, bevel=0.0015)
+    return _props(ob, role=role, label=label, face="lamp", lamp=lamp_tag, colour=colour if colour != "white" else "white")
+
+
+def flat_screen(frame, name, r, z, w=0.42, h=0.30, *, tag="aprm", legend="PLANT COMPUTER"):
+    """One of the few flat-panel displays let into the analog boards: a thin beige case
+    with a dark screen the page draws a trend on."""
+    m = mats()
+    MeshBuilder().box((-0.015, -r, z), (0.03, w + 0.04, h + 0.05)).build(f"Screen_{name}", m["screen_case"], frame, bevel=0.003)
+    return _face_quad(f"ui_{name}", frame, r, z, w, h, m["screen"], stand=0.031, face="screen", tag=tag, legend=legend,
+                      label=f"{legend} display")
+
+
+def document_pocket(frame, r, z, w=0.24, h=0.30, tab=None):
+    """Clear document pocket with a yellow tab, as screwed to the console fronts."""
+    m = mats()
+    MeshBuilder().box((-0.004, -r, z), (0.008, w, h)).build(f"Pocket_{tab or int(r * 100)}", m["pocket"], frame)
+    MeshBuilder().box((-0.009, -r, z + h / 2 - 0.012), (0.004, w, 0.024)).build(f"PocketTab_{tab or int(r * 100)}", m["pocket_tab"], frame)
+
+
+def stencil_plate(frame, text, r, z, size=0.045):
+    """Black panel-number plate with big white stencilled numbers ("318  301  302")."""
+    nameplate(frame, text, r, z, size=size, width=len(text) * size * 0.68 + 0.05)
 
 
 def lamp(frame, name, r, z, colour="red", *, tag, radius=0.011, label=None):
@@ -255,21 +316,36 @@ def thumbwheel(frame, name, r, z, *, tag, digits, legend, role_up, role_down, la
     pushbutton(frame, f"{name}_Down", r + w / 2 + 0.02, z, "black", role=role_down, label=f"{legend}: lower", radius=0.007)
 
 
-def annunciator_box(parent, name, r, z, w, rows, cols, *, keys, tilt=math.radians(12)):
-    """Annunciator window box above a benchboard: ``rows`` x ``cols`` engraved windows, one
-    canvas. ``keys`` names the alarm of each window, row by row, left to right ("" = spare)."""
+ANN_COL_W, ANN_ROW_H = 0.105, 0.088   # one tall annunciator window
+
+
+def annunciator_box(parent, name, r, z, w=None, rows=5, cols=10, *, keys, title=None, tilt=math.radians(10)):
+    """Annunciator window box above a benchboard: ``rows`` x ``cols`` tall engraved windows in
+    lettered columns (A, B, C ...) and numbered rows (1 to 5), one canvas, with the panel's
+    numbered title plate under it ("310 REACTOR"). ``keys`` names the alarm of each window,
+    row by row, left to right ("spare" or "" = blank window); short lists are padded."""
     m = mats()
-    h = rows * 0.075 + 0.04
+    keys = (list(keys) + ["spare"] * rows * cols)[:rows * cols]
+    w = w or cols * ANN_COL_W + 0.03
+    h = rows * ANN_ROW_H + 0.05
     fr = face_frame(f"AnnFrame_{name}", parent, (0.0, -r, z), pitch=-tilt)
-    MeshBuilder().box((0.09, 0, 0), (0.18, w + 0.06, h + 0.05)).build(f"AnnBox_{name}", m["ann_box"], fr, bevel=0.004)
-    return _face_quad(f"ui_{name}", fr, 0.0, 0.0, w, h, m["ann_window"], stand=0.002,
-                      face="ann", rows=rows, cols=cols, keys="|".join(keys), label=f"Annunciator panel {name[-4:]}")
+    MeshBuilder().box((0.09, 0, 0), (0.18, w + 0.06, h + 0.06)).build(f"AnnBox_{name}", m["ann_box"], fr, bevel=0.004)
+    face = _face_quad(f"ui_{name}", fr, 0.0, 0.0, w, h, m["ann_window"], stand=0.002,
+                      face="ann", rows=rows, cols=cols, keys="|".join(keys), letters=1,
+                      label=f"Annunciator panel {title or name[-4:]}")
+    if title:
+        nameplate(parent, title, r, z - h / 2 - 0.10, size=0.024, width=w * 0.55)
+    return face
 
 
 def core_display(frame, name, r, z, size=0.62):
-    """The full core display: a black panel with a 4-digit readout per control rod."""
+    """The full core display: a black panel ruled into a line grid with one red-lit module per
+    control rod, the "FULL CORE DISPLAY" plate above and the green digital readout over that."""
     m = mats()
-    MeshBuilder().box((-0.012, -r, z), (0.024, size + 0.04, size + 0.04)).build(f"Frame_{name}", m["bezel"], frame, bevel=0.003)
+    MeshBuilder().box((-0.012, -r, z), (0.024, size + 0.06, size + 0.06)).build(f"Frame_{name}", m["bezel"], frame, bevel=0.003)
+    nameplate(frame, "FULL CORE DISPLAY", r, z + size / 2 + 0.065, size=0.020, width=0.40)
+    digital(frame, f"{name}_Readout", r, z + size / 2 + 0.13, w=0.30, h=0.06, tag="rod_position_readout", digits=8,
+            legend="SELECTED ROD / POSITION", colour="green", label="Core display readout: selected rod and its position")
     return _face_quad(f"ui_{name}", frame, r, z, size, size, m["led"], stand=0.026,
                       face="core", tag="rod_notch", label="Full core display: control rod positions")
 

@@ -12,7 +12,7 @@ import { GLTFLoader } from "./vendor/three/loaders/GLTFLoader.js";
 
 const EYE = 1.65, RADIUS = 0.28, WALK = 1.5, RUN = 3.2, REACH = 2.0;
 const SPAWN = { x: 0.0, z: 1.3, yaw: 0.0, pitch: -0.12 };   // inside the horseshoe, facing P603
-const NO_COLLIDE = ["Ceiling", "LightFixtures", "Sign_Unit2", "WallClock", "ClockFrame"];
+const NO_COLLIDE = ["Ceiling", "CeilingGrid", "LightFixtures", "Sign_Unit2", "WallClock", "ClockFrame"];
 
 const SANS = '-apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
 const MONO = '"SF Mono", Menlo, Consolas, monospace';
@@ -53,8 +53,8 @@ function roomEnvironment(renderer) {
     m.position.set(x, y, z);
     env.add(m);
   };
-  box(20, 3.2, 15, 0x6c6a62, 0, 1.6, 0, THREE.BackSide);
-  for (const x of [-6, -2, 2, 6]) for (const z of [-4, 0, 4]) box(0.6, 0.05, 1.2, new THREE.Color(5, 5, 4.7), x, 3.15, z);
+  box(20, 3.2, 15, 0x7a6a60, 0, 1.6, 0, THREE.BackSide);
+  box(20, 0.05, 15, new THREE.Color(1.8, 1.8, 1.7), 0, 3.15, 0);   // the luminous ceiling
   const pm = new THREE.PMREMGenerator(renderer);
   const tex = pm.fromScene(env, 0.04).texture;
   pm.dispose();
@@ -69,7 +69,7 @@ export class RoomWorld {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMappingExposure = 0.72;
     el.appendChild(this.renderer.domElement);
     this.canvas = this.renderer.domElement;
     this.scene = new THREE.Scene();
@@ -77,9 +77,9 @@ export class RoomWorld {
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.05, 60);
     this.camera.rotation.order = "YXZ";
     this.scene.environment = roomEnvironment(this.renderer);
-    this.scene.add(new THREE.HemisphereLight(0xf6f7ff, 0x40443f, 0.45));
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x3a2024, 0.4));
     for (const x of [-6, 0, 6]) for (const z of [-5, -1, 3]) {
-      const l = new THREE.PointLight(0xfff5e6, 2.6, 11, 1.5);
+      const l = new THREE.PointLight(0xfff8ee, 2.2, 11, 1.5);
       l.position.set(x, 3.05, z);
       this.scene.add(l);
     }
@@ -130,6 +130,7 @@ export class RoomWorld {
       }
       if (ud.face === "lamp") {
         o.material = o.material.clone();
+        o.userData.offColour = o.material.color.getHex();
         this.lamps.push({ mesh: o, ud });
       } else if (ud.face && name.startsWith("ui_")) {
         this.faces.push(this._face(o, ud));
@@ -138,7 +139,8 @@ export class RoomWorld {
         // Blender (x, y, z) became three (x, z, -y): the pivot sits on the handle's own axis.
         this.switches.push({ mesh: o, ud, pivot: new THREE.Vector3(0, ud.pivot_z, -ud.pivot_y), n: ud.positions.split(",").length });
       }
-      if (o.material?.name === "PB_LightFixture") o.material.emissiveIntensity = 1.2;
+      if (o.material?.name === "PB_LightFixture") o.material.emissiveIntensity = 0.55;
+      if (o.material?.name === "PB_Ceiling") o.material.emissiveIntensity = 0.35;
     });
     this.renderer.setAnimationLoop(() => this._frame());
   }
@@ -161,7 +163,7 @@ export class RoomWorld {
     g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
     mesh.geometry = g;
     const w = z1 - z0, h = y1 - y0;
-    const scale = ud.face === "ann" || ud.face === "core" || ud.face === "rodselect" ? 1400 : 2600;
+    const scale = ud.face === "ann" || ud.face === "core" || ud.face === "rodselect" || ud.face === "drawing" ? 1400 : 2600;
     const cv = document.createElement("canvas");
     cv.width = Math.min(1536, Math.max(96, Math.round(w * scale)));
     cv.height = Math.min(1536, Math.max(96, Math.round(h * scale)));
@@ -358,7 +360,8 @@ export class RoomWorld {
       const on = tag === "" ? false : ann.__test__ ? true : !!L[tag];
       mesh.material.emissive.setHex(on ? LAMP_RGB[ud.colour] || 0xffffff : 0);
       mesh.material.emissiveIntensity = on ? 1.6 : 0;
-      mesh.material.color.setHex(on ? LAMP_RGB[ud.colour] : 0x101010);
+      // a round lens goes near black when dark; a square illuminated button keeps its dim lens colour
+      mesh.material.color.setHex(on ? LAMP_RGB[ud.colour] : ud.role ? mesh.userData.offColour : 0x101010);
     }
     for (const sw of this.switches) {
       let idx = (sw.n - 1) / 2;
@@ -373,8 +376,9 @@ export class RoomWorld {
       sw.mesh.position.copy(sw.pivot).sub(p);
     }
     for (const f of this.faces) {
+      if (f.ud.face === "drawing" && f.drawn) continue;   // the laminated drawings never change
       const d = DRAW[f.ud.face];
-      if (d) { d(f, r, L, ann, s, hist, blink); f.tex.needsUpdate = true; }
+      if (d) { d(f, r, L, ann, s, hist, blink); f.tex.needsUpdate = true; f.drawn = true; }
     }
   }
 }
@@ -555,19 +559,92 @@ function drawRecorder(f, r, L, ann, s, hist) {
   vText(g, `${hi} ${ud.unit || ""}`, x1, head + H * 0.03, Math.max(6, W * 0.04), "#444", "right");
 }
 
+const DIGITAL = {
+  red: { bg: "#160404", fg: "#ff3b1f", dim: "#aa7766" },
+  green: { bg: "#031006", fg: "#3aff5a", dim: "#5f9a68" },
+  blue: { bg: "#04070f", fg: "#5fb4ff", dim: "#6a86a8" },
+};
 function drawDigital(f, r, L, ann, s) {
   const { ctx: g, cv, ud } = f;
   const W = cv.width, H = cv.height;
-  g.fillStyle = "#160404";
+  const c = DIGITAL[ud.colour] || DIGITAL.red;
+  g.fillStyle = c.bg;
   g.fillRect(0, 0, W, H);
   const v = r[ud.tag];
   let text;
   if (ud.tag === "time_since_scram") text = s.scrammed ? String(Math.floor(v || 0)).padStart(+ud.digits || 4, "0") : "";
+  else if (ud.tag === "rod_position_readout") {
+    const n = val(r, "rod_notch");
+    text = `${r.rod_selected || "--"}  ${n === null ? "--" : String(Math.round(n)).padStart(2, "0")}`;
+  }
   else if (typeof v === "string") text = v;
   else if (typeof v === "number") text = ud.tag === "rod_notch" ? String(Math.round(v)).padStart(2, "0") : ud.tag === "reactivity" ? (v >= 0 ? "+" : "-") + Math.abs(v).toFixed(2) : v.toFixed(0);
   else text = "--";
-  vText(g, text, W / 2, H / 2, H * 0.72, "#ff3b1f", "center", true, MONO);
-  vText(g, String(ud.legend || ""), W / 2, H * 0.92, Math.max(6, H * 0.13), "#aa7766", "center");
+  vText(g, text, W / 2, H / 2, H * 0.72, c.fg, "center", true, MONO);
+  vText(g, String(ud.legend || ""), W / 2, H * 0.92, Math.max(6, H * 0.13), c.dim, "center");
+}
+
+// A flat-panel display let into the boards: a trend of its reading over the last ten minutes.
+function drawScreen(f, r, L, ann, s, hist) {
+  const { ctx: g, cv, ud } = f;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#0a1220";
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = "#1e3a5c";
+  g.fillRect(0, 0, W, H * 0.12);
+  vText(g, String(ud.legend || ""), W * 0.02, H * 0.06, H * 0.07, "#dfe8f5", "left", true);
+  const v = val(r, ud.tag);
+  vText(g, v === null ? "--" : fmtNum(v, 0, 1000), W * 0.98, H * 0.06, H * 0.08, "#8fd0ff", "right", true, MONO);
+  const x0 = W * 0.08, x1 = W * 0.96, y0 = H * 0.18, y1 = H * 0.92;
+  g.strokeStyle = "#20324a"; g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = y0 + (y1 - y0) * i / 4; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+  for (let i = 0; i <= 10; i++) { const x = x0 + (x1 - x0) * i / 10; g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); }
+  if (hist && hist.length > 1) {
+    const span = 600, t1 = s.time_s;
+    const pts = hist.filter((h) => h.t >= t1 - span && typeof h.r[ud.tag] === "number");
+    let lo = Infinity, hi = -Infinity;
+    for (const h of pts) { lo = Math.min(lo, h.r[ud.tag]); hi = Math.max(hi, h.r[ud.tag]); }
+    if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+    g.strokeStyle = "#5fe0a0"; g.lineWidth = Math.max(1.5, W / 220);
+    g.beginPath();
+    pts.forEach((h, i) => {
+      const x = x1 - (x1 - x0) * (t1 - h.t) / span, y = y1 - (y1 - y0) * (h.r[ud.tag] - lo) / (hi - lo);
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    });
+    g.stroke();
+    vText(g, fmtNum(hi, lo, hi), x0 - W * 0.01, y0, H * 0.05, "#7f93ad", "right", false, MONO);
+    vText(g, fmtNum(lo, lo, hi), x0 - W * 0.01, y1, H * 0.05, "#7f93ad", "right", false, MONO);
+  }
+}
+
+// A laminated system drawing on the mimic desk: a P&ID-style sketch of vessels, lines and
+// valves, drawn once from a fixed seed so every sheet differs.
+function drawDrawing(f) {
+  const { ctx: g, cv, ud } = f;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#f3f1ea";
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = "#333"; g.lineWidth = Math.max(1, W / 300);
+  g.strokeRect(W * 0.03, H * 0.03, W * 0.94, H * 0.94);
+  let seed = 1234 + 977 * (+ud.seed || 0);
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const vessels = 2 + Math.floor(rnd() * 3);
+  const nodes = [];
+  for (let i = 0; i < vessels; i++) {
+    const x = W * (0.15 + rnd() * 0.7), y = H * (0.15 + rnd() * 0.6), w = W * (0.08 + rnd() * 0.12), h = H * (0.08 + rnd() * 0.18);
+    g.strokeRect(x - w / 2, y - h / 2, w, h);
+    nodes.push({ x, y });
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = nodes[Math.floor(rnd() * nodes.length)], b = nodes[Math.floor(rnd() * nodes.length)];
+    const mx = a.x, my = b.y;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(mx, my); g.lineTo(b.x, b.y); g.stroke();
+    const vx = (mx + b.x) / 2, vy = my, s = W * 0.018;   // a valve bow-tie on the run
+    g.beginPath(); g.moveTo(vx - s, vy - s); g.lineTo(vx + s, vy + s); g.lineTo(vx + s, vy - s); g.lineTo(vx - s, vy + s); g.closePath(); g.stroke();
+  }
+  vText(g, String(ud.legend || ""), W / 2, H * 0.95, Math.max(8, W * 0.045), "#222", "center", true);
+  vText(g, "PBAPS UNIT 2   SIMPLIFIED FLOW DIAGRAM", W / 2, H * 0.07, Math.max(6, W * 0.03), "#444", "center");
 }
 
 function drawMA(f, r, L) {
@@ -612,25 +689,26 @@ function drawThumbwheel(f, r) {
 function drawAnn(f, r, L, ann, s, hist, blink) {
   const { ctx: g, cv, ud } = f;
   const W = cv.width, H = cv.height;
-  g.fillStyle = "#2a2d2c";
+  g.fillStyle = "#1c1c1c";
   g.fillRect(0, 0, W, H);
   const rows = +ud.rows, cols = +ud.cols;
   const keys = String(ud.keys).split("|");
-  const cw = W / cols, ch = H / rows;
+  // column letters across the top and row numbers down the left, as on the real boxes
+  const mx = ud.letters ? W * 0.04 : 0, my = ud.letters ? H * 0.07 : 0;
+  const cw = (W - mx) / cols, ch = (H - my) / rows;
+  if (ud.letters) {
+    for (let c = 0; c < cols; c++) vText(g, String.fromCharCode(65 + c), mx + c * cw + cw / 2, my / 2, my * 0.6, "#e8e4d8", "center", true);
+    for (let k = 0; k < rows; k++) vText(g, String(k + 1), mx / 2, my + k * ch + ch / 2, mx * 0.6, "#e8e4d8", "center", true);
+  }
   const test = !!ann.__test__;
   keys.forEach((key, i) => {
     const col = i % cols, row = Math.floor(i / cols);
-    const x = col * cw, y = row * ch;
+    const x = mx + col * cw, y = my + row * ch;
     const st = test ? "on" : ann[key] || "off";
     const lit = st === "on" || (st === "flash" && blink);
     const red = ANN_RED.has(key);
-    g.fillStyle = lit ? (red ? "#ff4a3a" : "#ffd84a") : "#d9d6c8";
-    if (!lit) g.fillStyle = "#cfcbbb";
-    g.fillRect(x + cw * 0.04, y + ch * 0.06, cw * 0.92, ch * 0.88);
-    if (!lit) {
-      g.fillStyle = "rgba(20,20,20,0.55)";
-      g.fillRect(x + cw * 0.04, y + ch * 0.06, cw * 0.92, ch * 0.88);
-    }
+    g.fillStyle = lit ? (red ? "#ff4a3a" : "#ffd84a") : "#b9b6a8";
+    g.fillRect(x + cw * 0.04, y + ch * 0.05, cw * 0.92, ch * 0.90);
     const text = ANN_TEXT[key] ?? key.toUpperCase();
     const words = text.split(" ");
     const lines = [];
@@ -639,8 +717,8 @@ function drawAnn(f, r, L, ann, s, hist, blink) {
       if ((cur + " " + w).trim().length > 12 && cur) { lines.push(cur); cur = w; } else cur = (cur + " " + w).trim();
     }
     if (cur) lines.push(cur);
-    const fs = Math.max(6, Math.min(ch * 0.22, cw * 0.13));
-    lines.forEach((ln, k) => vText(g, ln, x + cw / 2, y + ch / 2 + (k - (lines.length - 1) / 2) * fs * 1.15, fs, lit ? "#111" : "#8a877a", "center", true));
+    const fs = Math.max(6, Math.min(ch * 0.19, cw * 0.14));
+    lines.forEach((ln, k) => vText(g, ln, x + cw / 2, y + ch / 2 + (k - (lines.length - 1) / 2) * fs * 1.15, fs, lit ? "#111" : "#5a5850", "center", true));
   });
 }
 
@@ -651,21 +729,28 @@ function drawCore(f, r, L, ann, s) {
   g.fillRect(0, 0, W, H);
   const notch = val(r, "rod_notch");
   const sel = r.rod_selected;
-  const cell = Math.min(W, H) / 15.6;
+  const cell = Math.min(W, H) / 16.4;
   const ox = (W - cell * 15) / 2, oy = (H - cell * 15) / 2;
-  // core outline
-  g.strokeStyle = "#444"; g.lineWidth = 1;
-  g.beginPath(); g.arc(W / 2, H / 2, cell * 7.5, 0, Math.PI * 2); g.stroke();
+  // the black panel is ruled into a grid of thin lines; every rod is a red-lit module in its cell
+  g.strokeStyle = "#3a3a3a"; g.lineWidth = Math.max(1, W / 700);
+  for (let k = 0; k <= 15; k++) {
+    g.beginPath(); g.moveTo(ox + k * cell, oy); g.lineTo(ox + k * cell, oy + 15 * cell); g.stroke();
+    g.beginPath(); g.moveTo(ox, oy + k * cell); g.lineTo(ox + 15 * cell, oy + k * cell); g.stroke();
+  }
   for (const rod of ROD_GRID) {
     const x = ox + rod.i * cell, y = oy + (14 - rod.j) * cell;
-    g.fillStyle = rod.name === sel ? "#3a2a08" : "#161616";
-    g.fillRect(x + 1, y + 1, cell - 2, cell - 2);
-    const text = s.scrammed && notch < 0.5 ? "00" : notch === null ? "--" : String(Math.round(notch)).padStart(2, "0");
+    const selected = rod.name === sel;
     const full = Math.round(notch || 0) >= 48;
-    vText(g, text, x + cell / 2, y + cell * 0.5, cell * 0.55, s.scrammed ? "#ff3b1f" : full ? "#30ff50" : "#ff6a3a", "center", true, MONO);
+    g.fillStyle = selected ? "#5a1408" : "#230806";
+    g.fillRect(x + cell * 0.12, y + cell * 0.12, cell * 0.76, cell * 0.76);
+    g.fillStyle = selected ? "#ffb020" : s.scrammed ? "#ff2a1a" : full ? "#ff5a40" : "#ff7a4a";
+    g.fillRect(x + cell * 0.12, y + cell * 0.12, cell * 0.76, cell * 0.14);   // the lit bar across the top of the module
+    const text = s.scrammed && notch < 0.5 ? "00" : notch === null ? "--" : String(Math.round(notch)).padStart(2, "0");
+    vText(g, text, x + cell / 2, y + cell * 0.6, cell * 0.46, s.scrammed ? "#ff3b1f" : "#ff6a3a", "center", true, MONO);
+    vText(g, rod.name, x + cell / 2, y + cell * 0.88, cell * 0.16, "#8a4a3a", "center", false, MONO);
   }
-  vText(g, "FULL CORE DISPLAY   ROD POSITION (NOTCH 00 - 48)", W / 2, H * 0.025, Math.max(7, W * 0.022), "#bbb", "center", true);
-  vText(g, `SELECTED ${sel || "--"}`, W * 0.5, H * 0.975, Math.max(7, W * 0.024), "#ffb020", "center", true, MONO);
+  vText(g, "ROD POSITION (NOTCH 00 - 48)", W / 2, H * 0.022, Math.max(7, W * 0.022), "#bbb", "center", true);
+  vText(g, `SELECTED ${sel || "--"}`, W * 0.5, H * 0.978, Math.max(7, W * 0.024), "#ffb020", "center", true, MONO);
 }
 
 function drawRodSelect(f, r) {
@@ -709,6 +794,7 @@ function drawClock(f, r, L, ann, s) {
 const DRAW = {
   meter: drawMeter, round: drawRound, recorder: drawRecorder, digital: drawDigital, ma: drawMA,
   thumbwheel: drawThumbwheel, ann: drawAnn, core: drawCore, rodselect: drawRodSelect, clock: drawClock,
+  screen: drawScreen, drawing: drawDrawing,
 };
 
 export { ROD_GRID };

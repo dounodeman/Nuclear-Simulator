@@ -83,12 +83,21 @@ on the main menu, or `/pb2.html`): the Unit 2 horseshoe of GE benchboards in its
 with the reactor control benchboard (P603: full core display, APRM/IRM/SRM meters, rod select
 matrix and rod pushbuttons, mode switch, manual scram buttons, recirculation and feedwater
 stations), the core cooling benchboard (P601: HPCI, RCIC, core spray and RHR switches, the
-eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), with annunciator
-windows above each. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
+eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653). The finish follows
+the project's reference photos of the Unit 2 boards: cream GE panels with black trim on maroon
+carpet under a white luminous ceiling, annunciator boxes of tall windows in lettered columns
+(A to J) and five numbered rows with their numbered title plates (301 F/W, 310/311 REACTOR,
+313/314 RECIRC, 321 HPCI, 322 RCIC, 323 RHR/CS, 302 RFPT, 303 COND, 305/306 TURBINE ...), the
+full core display of red-lit rod modules on a black grid with its green readout, banks of
+edgewise meters, pistol-grip switches with red/green lights, rows of square illuminated
+pushbuttons, blue keypad displays, a few flat screens, stencilled panel-number plates and
+yellow-tabbed document pockets on the console fronts, red doors and a map-style desk of
+laminated drawings. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
 `reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
 engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).
 
 ![Peach Bottom 2 control room](models/renders/pb2_control_room_overview.png)
+![Peach Bottom 2 annunciators](models/renders/pb2_control_room_annunciators.png)
 
 Every number, where it came from and which are still typical-BWR/4 stand-ins are in
 [docs/peach_bottom_2_reference.md](docs/peach_bottom_2_reference.md). The control-room
