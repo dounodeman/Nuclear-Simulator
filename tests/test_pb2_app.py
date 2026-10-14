@@ -90,3 +90,93 @@ def test_every_initial_state_starts_steady():
         s.advance(30.0)
         st = s.state()
         assert not st["scrammed"] and st["annunciators"] == {}, key
+
+
+# --------------------------------------------------------------------------- auxiliary benchboards
+
+def test_feedwater_heater_string_out_cools_the_feed_and_raises_power():
+    s = BWRSession("full_power", seed=1)
+    s.command("aux", equip="heater", unit="a")
+    s.advance(600.0)
+    st = s.state()
+    r = st["readings"]
+    assert r["feed_temp"] < 350.0 and r["fw_string_a"] < 150.0
+    assert r["aprm"] > 103.0   # colder feed, more subcooling, more power
+    assert st["annunciators"]["fw_heater_out"] == "flash" and st["lamps"]["heater_a_stopped"]
+
+
+def test_losing_circulating_water_trips_the_turbine_then_isolates_the_condenser():
+    s = BWRSession("full_power", seed=1)
+    for u in "abc":
+        s.command("aux", equip="circ_pump", unit=u)
+    s.advance(90.0)
+    st = s.state()
+    assert st["lamps"]["turbine_tripped"] and st["scrammed"]
+    assert st["readings"]["vacuum"] < 22.5 and st["annunciators"]["vacuum_low"] == "flash"
+    s.advance(240.0)
+    st = s.state()
+    assert st["readings"]["vacuum"] < 7.0 and not st["lamps"]["condenser_avail"] and st["lamps"]["msiv_closed"]
+
+
+def test_losing_instrument_air_scrams_the_reactor():
+    s = BWRSession("full_power", seed=1)
+    s.command("aux", equip="air_comp", unit="a")
+    s.command("aux", equip="air_comp", unit="b")
+    s.advance(120.0)
+    assert not s.state()["scrammed"] and s.state()["annunciators"]["air_low"] == "flash"
+    s.advance(80.0)
+    st = s.state()
+    assert st["scrammed"] and "instrument air" in st["scram_causes"][0]
+
+
+def test_diesels_restore_low_pressure_ecc_and_torus_cooling_after_a_blackout():
+    s = BWRSession("full_power", seed=1)
+    s.command("station_blackout")
+    s.advance(20.0)
+    st = s.state()
+    assert st["lamps"]["station_blackout"] and st["lamps"]["lpci_unavail"] and st["readings"]["e_bus_1"] == 0.0
+    with pytest.raises(CommandError):
+        s.command("aux", equip="hpsw_pump", unit="a")   # no power on its bus
+    with pytest.raises(CommandError):
+        s.command("aux", equip="cond_pump", unit="a")   # non-safety bus: needs offsite power
+    s.command("aux", equip="diesel", unit="1")
+    s.advance(15.0)
+    st = s.state()
+    assert st["lamps"]["diesel_1_run"] and st["readings"]["e_bus_1"] == pytest.approx(4.16)
+    assert not st["lamps"]["lpci_unavail"] and not st["lamps"]["station_blackout"]
+    s.command("aux", equip="hpsw_pump", unit="a")
+    s.command("aux", equip="torus_cool", unit="a")
+    s.advance(5.0)
+    assert s.state()["readings"]["rhr_hx"] > 0 and s.state()["lamps"]["torus_cooling"]
+
+
+def test_torus_cooling_takes_heat_out_of_the_torus():
+    s = BWRSession("full_power", seed=1)
+    s.sim.torus_temp = 60.0
+    s.command("aux", equip="hpsw_pump", unit="a")
+    s.command("aux", equip="torus_cool", unit="a")
+    s.advance(600.0)
+    assert s.sim.torus_temp < 59.0
+
+
+def test_crd_condensate_and_cleanup_interlocks():
+    s = BWRSession("full_power", seed=1)
+    s.command("aux", equip="crd_pump", unit="a")
+    with pytest.raises(CommandError):
+        s.command("rod_drive", direction="in")          # no drive water
+    s.advance(120.0)
+    assert s.state()["annunciators"]["crd_accum"] == "flash"
+    s = BWRSession("full_power", seed=1)
+    for u in "abc":
+        s.command("aux", equip="cond_pump", unit=u)
+    s.advance(5.0)
+    assert s.state()["lamps"]["feed_stopped"]
+    with pytest.raises(CommandError):
+        s.command("feed_pump")                           # no suction
+    s = BWRSession("full_power", seed=1)
+    s.command("slc")
+    s.advance(2.0)
+    st = s.state()
+    assert st["lamps"]["rwcu_isolated"] and st["readings"]["rwcu_flow"] == 0.0
+    with pytest.raises(CommandError):
+        s.command("aux", equip="rwcu_pump", unit="a")   # SLC still injecting

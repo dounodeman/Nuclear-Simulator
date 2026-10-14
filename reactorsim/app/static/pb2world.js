@@ -34,10 +34,19 @@ const ANN_TEXT = {
   cs_unavail: "CORE SPRAY OOS", lpci_unavail: "LPCI OUT OF SERVICE", turbine_trip: "TURBINE TRIP", gen_breaker: "GEN BREAKER OPEN",
   tcv_fast: "TCV FAST CLOSURE", bypass_open: "BYPASS VALVES OPEN", bypass_unavail: "BYPASS VALVES OOS", condenser_low: "CONDENSER VACUUM LOW",
   ehc_trouble: "EHC TROUBLE", feed_a_trip: "RFPT A TRIP", feed_b_trip: "RFPT B TRIP", feed_c_trip: "RFPT C TRIP",
-  station_blackout: "LOSS OF OFFSITE POWER", diesel_start: "DIESEL GEN AUTO START", spare: "",
+  station_blackout: "STATION BLACKOUT", diesel_start: "DIESEL GEN START", spare: "",
+  cond_pump_trip: "CONDENSATE PUMP TRIP", cond_o2_high: "COND DISSOLVED O2 HI", fw_heater_out: "FW HEATER STRING OOS",
+  vacuum_low: "CONDENSER VACUUM LOW", circ_pump_trip: "CIRC WATER PUMP TRIP", sjae_trouble: "SJAE TROUBLE",
+  offgas_rad_high: "OFFGAS RAD HIGH", rwcu_isolated: "RWCU ISOLATION", conductivity_high: "RX WATER COND HIGH",
+  crd_pump_trip: "CRD PUMP TRIP", crd_accum: "CRD ACCUM TROUBLE", air_low: "INST AIR PRESS LOW",
+  scram_air_low: "SCRAM AIR HDR LOW", torus_cooling: "RHR TORUS COOLING", rb_isolated: "RX BLDG ISOLATION",
+  sgts_run: "SGTS RUNNING", rb_dp_low: "RX BLDG dP LOW", rad_high: "RB VENT / STACK RAD HI",
+  diesel_run: "DIESEL GEN RUNNING", diesel_fail: "DIESEL GEN FAIL TO START", dc_low: "125V DC BATTERY LOW",
+  loop: "LOSS OF OFFSITE POWER",
 };
 const ANN_RED = new Set(["scram", "level_low_l3", "level_l2", "level_l1", "core_uncovered", "fuel_damage", "hpci_init", "rcic_init",
-  "cs_init", "lpci_init", "ads_open", "turbine_trip", "msiv_closure", "station_blackout", "atws_rpt", "aprm_high", "aprm_flow"]);
+  "cs_init", "lpci_init", "ads_open", "turbine_trip", "msiv_closure", "station_blackout", "atws_rpt", "aprm_high", "aprm_flow",
+  "scram_air_low", "loop", "diesel_fail", "rad_high", "rwcu_isolated", "rb_isolated", "vacuum_low"]);
 
 // Control rod positions of a BWR/4 core: rods sit between four bundles on a 15 x 15 lattice
 // named by odd coordinates 02..58; the 185 inside the core boundary are the ones on the display.

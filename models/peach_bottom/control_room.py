@@ -6,7 +6,11 @@ benchboards the operator stands inside, open to the south, with the reactor cont
 (P603) across the north, the core cooling benchboard (P601) on the operator's left and the
 turbine-generator benchboard (P653) on the right, joined by angled corner panels (P602 RHR and
 containment, P652 electrical). Vertical back panels for recorders and relays stand behind the
-horseshoe, and the shift supervisor's desk faces the boards from the open end.
+horseshoe, the balance-of-plant and auxiliary benchboards (P604 CRD/RWCU, P606 service water and
+air, P605 secondary containment and radiation monitors, P650 condensate and feedwater heaters,
+P651 circulating water and offgas, P654 diesel generators) line the side walls, and the shift
+supervisor's desk faces the boards from the open end. The auxiliary panel numbers are in the GE
+pattern but not checked against Peach Bottom's own.
 
 Panel numbers follow the GE pattern (the visual reference says to check them against the
 Peach Bottom UFSAR Chapter 7); the proportions (benchboard 0.95 m bench, 2.3 m vertical
@@ -450,6 +454,201 @@ def build_p653(parent):
     return fr
 
 
+# ----------------------------------------------------------------------------- auxiliary benchboards
+# Balance-of-plant and auxiliary systems on benchboards along the side walls, outside the
+# horseshoe: the reactor auxiliaries (CRD, cleanup, service water and air, secondary
+# containment and radiation monitors) on the west wall behind the core cooling board, the
+# condensate and feedwater heaters, circulating water and offgas and the emergency diesels on the
+# east wall behind the turbine board. Their switches run the equipment in reactorsim/app/bwr_aux.py.
+
+ANN_AUX = {
+    "P604": [("331 CRD/RWCU", ["crd_pump_trip", "crd_accum", "rod_block", "rwcu_isolated", "conductivity_high", "level_l2"])],
+    "P606": [("333 SW/AIR", ["torus_cooling", "torus_temp", "lpci_unavail", "air_low", "scram_air_low", "msiv_closure"])],
+    "P605": [("334 SEC CONT", ["rb_isolated", "sgts_run", "rb_dp_low", "drywell_press", "level_l2"]),
+             ("320 RAD MON", ["rad_high", "offgas_rad_high", "fuel_damage"])],
+    "P650": [("335 COND/FW HTR", ["cond_pump_trip", "cond_o2_high", "fw_heater_out", "feed_trip", "vacuum_low"])],
+    "P651": [("336 CIRC WTR/OG", ["vacuum_low", "circ_pump_trip", "sjae_trouble", "offgas_rad_high", "condenser_low", "turbine_trip"])],
+    "P654": [("337 DIESEL GEN", ["loop", "diesel_run", "diesel_fail", "dc_low", "station_blackout", "diesel_start"])],
+}
+AUX_W = 3.6
+
+
+def _meter_row(v, prefix, items, r0, z, dr=0.15):
+    """A row of edgewise meters: (tag, lo, hi, unit, legend[, extra kwargs])."""
+    for i, it in enumerate(items):
+        tag, lo, hi, unit, legend = it[:5]
+        meter(v, f"{prefix}_{tag}", r0 + i * dr, z, w=0.09, h=0.22, tag=tag, lo=lo, hi=hi, unit=unit, legend=legend,
+              **(it[5] if len(it) > 5 else {}))
+
+
+def _equipment(b, v, prefix, equip, units, r0, dr, title, noun, positions=("STOP", "", "START"), amps_hi=None, amps_legend=None):
+    """A row of spring-return control switches with their red/green lights on the bench and,
+    when the equipment has a motor, an ammeter over each switch on the vertical section."""
+    nameplate(b, title, r0 + dr * (len(units) - 1) / 2, 0.30, size=0.010)
+    for i, u in enumerate(units):
+        key = f"{equip}_{u.lower()}"
+        control_switch(b, f"{prefix}_{equip}_{u}", r0 + i * dr, 0.10, role=f"aux:{equip}:{u.lower()}",
+                       label=f"{noun} {u}: {positions[0].lower()} / {positions[2].lower()}", positions=list(positions),
+                       tag=f"{key}_run", light_tags=(f"{key}_run", f"{key}_stopped"), radius=0.026)
+        if amps_hi:
+            meter(v, f"{prefix}_{key}_amps", r0 + i * dr, 1.18, tag=f"{key}_amps", lo=0, hi=amps_hi, unit="A",
+                  legend=f"{amps_legend or noun.upper()} {u}")
+
+
+def _aux_board(parent, name, origin, yaw, title, front):
+    return benchboard(parent, name, origin, yaw, AUX_W, ann=ANN_AUX[name], title=title, front=front, pockets=[0.0])
+
+
+def build_p604(parent):
+    fr = _aux_board(parent, "P604", (-9.4, 4.0, 0.0), math.pi, "P604  CRD HYDRAULICS / REACTOR WATER CLEANUP", [("331", -1.2), ("332", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CONTROL ROD DRIVE HYDRAULICS", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P604", [("crd_charging", 0, 2000, "psig", "CHARGING WTR PRESS", {"red": 940}),
+                           ("crd_drive_dp", 0, 400, "psid", "DRIVE WATER dP"),
+                           ("crd_flow", 0, 100, "gpm", "CRD SYSTEM FLOW"),
+                           ("pressure", 0, 1500, "psig", "RX PRESSURE")], -1.45, 1.86)
+    recorder(v, "P604_RecCRD", -0.95, 1.50, tags=["crd_charging", "pressure"], lo=0, hi=2000, unit="psig",
+             legend="CHARGING HEADER / RX PRESSURE")
+    _equipment(b, v, "P604", "crd_pump", "AB", -1.30, 0.30, "CRD PUMPS  A   B", "CRD pump", amps_hi=60, amps_legend="CRD PUMP")
+    lamp(b, "P604_RodBlock", -0.55, 0.20, "amber", tag="rod_block", label="Rod block")
+    lamp(b, "P604_Accum", -0.55, 0.12, "amber", tag="crd_accum", label="CRD accumulator / charging pressure low")
+    nameplate(v, "REACTOR WATER CLEANUP", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P604", [("rwcu_flow", 0, 500, "gpm", "RWCU FLOW"),
+                           ("conductivity", 0, 0.5, "uS/cm", "RX WATER CONDUCTIVITY", {"red": 0.3}),
+                           ("rwcu_inlet_temp", 0, 600, "F", "RWCU INLET TEMP")], 0.55, 1.86)
+    recorder(v, "P604_RecCond", 1.10, 1.50, tags=["conductivity"], lo=0, hi=0.5, unit="uS/cm", legend="REACTOR WATER CONDUCTIVITY")
+    lamp(v, "P604_RWCUIsol", 0.55, 1.55, "amber", tag="rwcu_isolated", radius=0.014, label="RWCU isolated")
+    nameplate(v, "RWCU ISOL", 0.55, 1.48, size=0.007)
+    _equipment(b, v, "P604", "rwcu_pump", "AB", 0.70, 0.30, "RWCU PUMPS  A   B", "RWCU pump", amps_hi=150, amps_legend="RWCU PUMP")
+
+
+def build_p606(parent):
+    fr = _aux_board(parent, "P606", (-9.4, 0.0, 0.0), math.pi, "P606  SERVICE WATER / TORUS COOLING / INSTRUMENT AIR",
+                    [("333", -1.2), ("333", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "HIGH PRESSURE SERVICE WATER / RHR TORUS COOLING", -0.85, 2.06, size=0.012)
+    _meter_row(v, "P606", [("hpsw_flow", 0, 20000, "gpm", "HPSW FLOW"),
+                           ("rhr_hx", 0, 25000, "gpm", "RHR HX FLOW"),
+                           ("rhr_hx_out", 0, 250, "F", "RHR HX OUTLET TEMP"),
+                           ("torus_temp", 0, 250, "F", "TORUS WATER TEMP")], -1.40, 1.86)
+    recorder(v, "P606_RecTorus", -0.55, 1.50, tags=["torus_temp", "rhr_hx_out"], lo=0, hi=250, unit="F",
+             legend="TORUS TEMP / RHR HX OUTLET")
+    _equipment(b, v, "P606", "hpsw_pump", "ABCD", -1.62, 0.17, "HPSW PUMPS  A  B  C  D", "HPSW pump", amps_hi=200, amps_legend="HPSW PUMP")
+    _equipment(b, v, "P606", "torus_cool", "AB", -0.78, 0.24, "RHR TORUS COOLING  A   B", "RHR torus cooling loop",
+               positions=("OFF", "", "ON"))
+    nameplate(v, "INSTRUMENT AIR", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P606", [("air_header", 0, 120, "psig", "INST AIR HEADER", {"red": 60}),
+                           ("pressure", 0, 1500, "psig", "RX PRESSURE")], 0.60, 1.86)
+    lamp(v, "P606_AirLow", 1.05, 1.92, "amber", tag="air_low", radius=0.013, label="Instrument air pressure low")
+    lamp(v, "P606_ScramAir", 1.05, 1.84, "red", tag="scram_air_low", radius=0.013, label="Scram air header pressure low")
+    nameplate(v, "AIR LOW / SCRAM AIR", 1.05, 1.77, size=0.007)
+    recorder(v, "P606_RecAir", 1.25, 1.50, tags=["air_header"], lo=0, hi=120, unit="psig", legend="INSTRUMENT AIR HEADER")
+    _equipment(b, v, "P606", "air_comp", "ABC", 0.55, 0.22, "AIR COMPRESSORS  A   B   C", "Instrument air compressor",
+               amps_hi=150, amps_legend="AIR COMP")
+
+
+def build_p605(parent):
+    fr = _aux_board(parent, "P605", (-9.4, -4.0, 0.0), math.pi, "P605  SECONDARY CONTAINMENT / RADIATION MONITORING",
+                    [("334", -1.2), ("320", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "REACTOR BUILDING HVAC / STANDBY GAS TREATMENT", -0.90, 2.06, size=0.012)
+    _meter_row(v, "P605", [("rb_dp", -1.0, 0.5, "in wg", "RX BLDG dP"),
+                           ("sgts_flow", 0, 15000, "cfm", "SGTS FLOW"),
+                           ("drywell_pressure", -5, 80, "psig", "DRYWELL PRESSURE")], -1.40, 1.86)
+    lamp(v, "P605_RBIsol", -0.85, 1.92, "amber", tag="rb_isolated", radius=0.014, label="Reactor building isolated")
+    lamp(v, "P605_SGTS", -0.70, 1.92, "red", tag="sgts_run", radius=0.014, label="Standby gas treatment running")
+    nameplate(v, "RB ISOL   SGTS RUN", -0.78, 1.84, size=0.007)
+    recorder(v, "P605_RecRB", -1.10, 1.50, tags=["rb_dp"], lo=-1.0, hi=0.5, unit="in wg", legend="REACTOR BUILDING dP")
+    _equipment(b, v, "P605", "rb_hvac", "A", -1.45, 0.2, "RB VENT", "Reactor building ventilation", positions=("ISOL", "", "RUN"))
+    _equipment(b, v, "P605", "sgts", "AB", -1.05, 0.25, "SGTS  A   B", "Standby gas treatment train")
+    nameplate(v, "PROCESS AND AREA RADIATION MONITORS", 0.90, 2.06, size=0.012)
+    _meter_row(v, "P605", [("rb_vent_log", -2, 4, "mR/h", "RB VENT EXHAUST", {"log": 1, "red": 1.2}),
+                           ("refuel_log", -2, 4, "mR/h", "REFUEL FLOOR", {"log": 1}),
+                           ("stack_log", -2, 4, "mR/h", "MAIN STACK", {"log": 1, "red": 0.7}),
+                           ("offgas_log", -2, 4, "mR/h", "OFFGAS PRETREAT", {"log": 1, "red": 3.0}),
+                           ("cr_vent_log", -2, 4, "mR/h", "CONTROL RM VENT", {"log": 1}),
+                           ("msl_rad", 0, 10, "mR/h", "MAIN STEAM LINE")], 0.25, 1.86, dr=0.14)
+    recorder(v, "P605_RecRad", 0.95, 1.50, tags=["rb_vent_log", "stack_log", "offgas_log"], lo=-2, hi=4, unit="log mR/h",
+             legend="RB VENT / STACK / OFFGAS RAD")
+    lamp(b, "P605_RadHigh", 0.60, 0.15, "red", tag="rad_high", radius=0.014, label="Radiation high (RB vent or stack)")
+    nameplate(b, "RAD HIGH", 0.60, 0.07, size=0.008)
+
+
+def build_p650(parent):
+    fr = _aux_board(parent, "P650", (9.4, 4.0, 0.0), 0.0, "P650  CONDENSATE / FEEDWATER HEATERS", [("335", -1.2), ("335", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CONDENSATE / HOTWELL DEAERATION", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P650", [("cond_header", 0, 600, "psig", "COND HEADER PRESS"),
+                           ("hotwell_level", 0, 60, "in", "HOTWELL LEVEL"),
+                           ("hotwell_temp", 0, 200, "F", "HOTWELL TEMP"),
+                           ("vacuum", 0, 30, "in Hg", "CONDENSER VACUUM"),
+                           ("cond_o2", 0, 500, "ppb", "COND DISSOLVED O2", {"red": 100})], -1.60, 1.86)
+    recorder(v, "P650_RecO2", -0.95, 1.50, tags=["cond_o2"], lo=0, hi=500, unit="ppb", legend="CONDENSATE DISSOLVED OXYGEN")
+    _equipment(b, v, "P650", "cond_pump", "ABC", -1.45, 0.22, "CONDENSATE PUMPS  A   B   C", "Condensate pump",
+               amps_hi=500, amps_legend="COND PUMP")
+    nameplate(v, "FEEDWATER HEATERS (5 STAGES, 3 STRINGS)", 0.95, 2.06, size=0.012)
+    _meter_row(v, "P650", [("fw_string_a", 0, 500, "F", "HTR STRING A OUT"),
+                           ("fw_string_b", 0, 500, "F", "HTR STRING B OUT"),
+                           ("fw_string_c", 0, 500, "F", "HTR STRING C OUT"),
+                           ("feed_temp", 0, 500, "F", "FINAL FW TEMP"),
+                           ("feed_flow", 0, 20, "Mlb/h", "FEED FLOW")], 0.35, 1.86)
+    recorder(v, "P650_RecFW", 0.95, 1.50, tags=["feed_temp", "fw_string_a", "hotwell_temp"], lo=0, hi=500, unit="F",
+             legend="FINAL FW / STRING A / HOTWELL TEMP")
+    _equipment(b, v, "P650", "heater", "ABC", 0.65, 0.25, "HEATER STRINGS  A   B   C", "Feedwater heater string",
+               positions=("OUT", "", "IN"))
+
+
+def build_p651(parent):
+    fr = _aux_board(parent, "P651", (9.4, 0.0, 0.0), 0.0, "P651  CIRC WATER / AIR EJECTORS / OFFGAS", [("336", -1.2), ("336", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CIRCULATING WATER", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P651", [("circ_in_temp", 0, 150, "F", "CIRC WTR INLET"),
+                           ("circ_out_temp", 0, 150, "F", "CIRC WTR OUTLET"),
+                           ("circ_flow", 0, 600, "kgpm", "CIRC WATER FLOW"),
+                           ("vacuum", 0, 30, "in Hg", "CONDENSER VACUUM", {"red": 22.5}),
+                           ("hotwell_temp", 0, 200, "F", "HOTWELL TEMP")], -1.60, 1.86)
+    recorder(v, "P651_RecVac", -0.95, 1.50, tags=["vacuum"], lo=0, hi=30, unit="in Hg", legend="CONDENSER VACUUM")
+    _equipment(b, v, "P651", "circ_pump", "ABC", -1.45, 0.22, "CIRC WATER PUMPS  A   B   C", "Circulating water pump",
+               amps_hi=600, amps_legend="CIRC PUMP")
+    nameplate(v, "STEAM JET AIR EJECTORS / OFFGAS", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P651", [("sjae_steam", 0, 200, "psig", "SJAE STEAM PRESS"),
+                           ("offgas_flow", 0, 50, "scfm", "OFFGAS FLOW"),
+                           ("offgas_h2", 0, 4, "%", "RECOMB OUTLET H2"),
+                           ("offgas_log", -2, 4, "mR/h", "OFFGAS PRETREAT RAD", {"log": 1, "red": 3.0})], 0.45, 1.86)
+    recorder(v, "P651_RecOG", 0.95, 1.50, tags=["offgas_flow"], lo=0, hi=50, unit="scfm", legend="OFFGAS FLOW")
+    _equipment(b, v, "P651", "sjae", "AB", 0.70, 0.30, "AIR EJECTORS  A   B", "Steam jet air ejector", positions=("OFF", "", "ON"))
+
+
+def build_p654(parent):
+    fr = _aux_board(parent, "P654", (9.4, -4.0, 0.0), 0.0, "P654  EMERGENCY DIESEL GENERATORS", [("337", -1.2), ("337", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    meter(v, "P654_Grid", -1.70, 1.86, w=0.09, h=0.22, tag="grid_kv", lo=0, hi=600, unit="kV", legend="OFFSITE 500 kV")
+    lamp(v, "P654_Offsite", -1.70, 1.55, "white", tag="offsite_power", radius=0.014, label="Offsite power available")
+    nameplate(v, "OFFSITE", -1.70, 1.48, size=0.007)
+    meter(v, "P654_DC", 1.70, 1.86, w=0.09, h=0.22, tag="dc_bus", lo=0, hi=150, unit="V", legend="125 V DC BATTERY", red=105)
+    for i in range(4):
+        r = -1.20 + i * 0.80
+        nameplate(v, f"DIESEL GEN E{i + 1}   BUS E{i + 1}2", r, 2.06, size=0.011)
+        meter(v, f"P654_DG{i + 1}_kW", r - 0.07, 1.86, w=0.09, h=0.22, tag=f"diesel_kw_{i + 1}", lo=0, hi=4000, unit="kW",
+              legend=f"E{i + 1} DG LOAD")
+        meter(v, f"P654_E{i + 1}2_kV", r + 0.07, 1.86, w=0.09, h=0.22, tag=f"e_bus_{i + 1}", lo=0, hi=5, unit="kV",
+              legend=f"E{i + 1}2 BUS VOLTS")
+        lamp(v, f"P654_DG{i + 1}_Bkr", r - 0.05, 1.55, "red", tag=f"diesel_{i + 1}_run", radius=0.013,
+             label=f"Diesel generator E{i + 1} output breaker closed")
+        lamp(v, f"P654_DG{i + 1}_Open", r + 0.05, 1.55, "green", tag=f"diesel_{i + 1}_stopped", radius=0.013,
+             label=f"Diesel generator E{i + 1} stopped")
+        nameplate(v, "BKR CLOSED  OPEN", r, 1.48, size=0.007)
+        nameplate(b, f"DG E{i + 1}", r, 0.30, size=0.010)
+        control_switch(b, f"P654_diesel_{i + 1}", r, 0.10, role=f"aux:diesel:{i + 1}",
+                       label=f"Diesel generator E{i + 1}: stop / start", positions=["STOP", "", "START"],
+                       tag=f"diesel_{i + 1}_run", light_tags=(f"diesel_{i + 1}_run", f"diesel_{i + 1}_stopped"), radius=0.026)
+
+
+def build_aux_boards(parent):
+    for build in (build_p604, build_p606, build_p605, build_p650, build_p651, build_p654):
+        build(parent)
+
+
 def build_corner(parent, name, origin, yaw, title, items, ann=None):
     """Angled corner panel (no bench) with a few meters and lamps."""
     fr = benchboard(parent, name, origin, yaw, 2.2, with_bench=False, title=title, ann=ann, ann_cols=8)
@@ -601,4 +800,5 @@ def build_control_room(parent=None):
         ("P652_Grid", "grid_kv", 0, 600, "kV", "500 kV SWITCHYARD"),
     ], ann=ANN_P652)
     build_back_panels(root)
+    build_aux_boards(root)
     return root

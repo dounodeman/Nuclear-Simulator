@@ -83,7 +83,19 @@ on the main menu, or `/pb2.html`): the Unit 2 horseshoe of GE benchboards in its
 with the reactor control benchboard (P603: full core display, APRM/IRM/SRM meters, rod select
 matrix and rod pushbuttons, mode switch, manual scram buttons, recirculation and feedwater
 stations), the core cooling benchboard (P601: HPCI, RCIC, core spray and RHR switches, the
-eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653). The finish follows
+eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), plus the
+balance-of-plant and auxiliary benchboards along the side walls: CRD hydraulics and reactor
+water cleanup (P604), service water, RHR torus cooling and instrument air (P606), secondary
+containment and the radiation monitors (P605), condensate and the feedwater heaters (P650),
+circulating water, air ejectors and offgas (P651), and the four emergency diesel generators
+(P654). A BWR has no deaerator: the condenser hotwell deaerates the condensate under vacuum and
+the air ejectors carry the gases to offgas, so P650 shows hotwell dissolved oxygen instead. The
+equipment on those boards (`reactorsim/app/bwr_aux.py`) acts on the plant: a heater string out
+of service cools the feed and raises power, losing circulating water or the air ejectors loses
+vacuum (turbine trip, then MSIV closure), losing instrument air scrams the reactor, no CRD pump
+means no rod motion, no condensate pump trips the feed pumps, RWCU isolates on Level 2 and SLC,
+RHR torus cooling on service water cools the torus, and after a station blackout the diesels,
+started by hand, bring core spray and LPCI back. The finish follows
 the project's reference photos of the Unit 2 boards: cream GE panels with black trim on maroon
 carpet under a white luminous ceiling, annunciator boxes of tall windows in lettered columns
 (A to J) and five numbered rows with their numbered title plates (301 F/W, 310/311 REACTOR,

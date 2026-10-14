@@ -14,6 +14,7 @@ import math
 import threading
 import time
 
+from reactorsim.app.bwr_aux import Auxiliaries
 from reactorsim.app.session import SPEEDS, TICK_S, CommandError, _clean
 from reactorsim.physics import steam
 from reactorsim.reactors import simulator_for
@@ -70,6 +71,7 @@ class BWRSession:
             self.slc_injected = 0.0
             self.rod_selected = "26-27"
             self.srv_switch = [1] * len(sim.srv_open)   # AUTO
+            self.aux = Auxiliaries()                    # balance of plant and auxiliary systems
             self.ann: dict[str, dict] = {}              # key -> {"active", "acked"}
             self.ann_test_until = 0.0
             self._prev_power = sim.power
@@ -112,8 +114,14 @@ class BWRSession:
             self._update_annunciators()
 
     def _plant_extras(self, h: float, p0: float) -> None:
-        """Things the plant model does not carry: turbine speed, SLC boron, the period meter."""
+        """Things the plant model does not carry: turbine speed, SLC boron, the period meter and
+        the auxiliary systems on the side panels (bwr_aux)."""
         sim = self.sim
+        sp = sim.design.setpoints
+        self.aux.step(sim, h, self.slc_running, {
+            "level_l2": sim.level2_latched or sim.level_in <= sp.level2_in,
+            "drywell_press": sim.ads_open or (any(sim.srv_open) and sim.torus_temp > 60),
+        })
         # Turbine: holds 1800 rpm on the grid, coasts down after a trip, and the breaker opens.
         if sim.turbine_tripped or sim.msiv < 0.5:
             self.turbine_speed = max(0.0, self.turbine_speed - h * 1800.0 / 900.0)
@@ -206,8 +214,9 @@ class BWRSession:
             "condenser_low": not s.condenser_available,
             "ehc_trouble": False,
             "feed_a_trip": s.feed_tripped, "feed_b_trip": s.feed_tripped, "feed_c_trip": s.feed_tripped,
-            "station_blackout": not s.feed_available and not s.condenser_available,
-            "diesel_start": not s.feed_available and not s.condenser_available,
+            "station_blackout": not self.aux.offsite and self.aux.emergency_buses() == 0,
+            "diesel_start": any(self.aux.on["diesel"]),
+            **self.aux.conditions(s),
         }
         return c
 
@@ -285,7 +294,7 @@ class BWRSession:
                     "rcic_flow": rcic_flow, "rcic_speed": 4500.0 if s.rcic.running else 0.0,
                     "cs_flow_a": cs_flow / 2, "cs_flow_b": cs_flow / 2,
                     "lpci_flow_a": lpci_flow / 4, "lpci_flow_b": lpci_flow / 4, "lpci_flow_c": lpci_flow / 4, "lpci_flow_d": lpci_flow / 4,
-                    "eccs_flow": s.eccs_flow / GPM, "rhr_hx": 0.0,
+                    "eccs_flow": s.eccs_flow / GPM,
                     "torus_temp": f_of_c(s.torus_temp), "torus_level": 0.0,
                     "drywell_pressure": 0.9 + (12.0 if s.ads_open else 0.0), "drywell_temp": 135.0 + 0.5 * (f_of_c(s.torus_temp) - 86),
                     "torus_pressure": 0.4 + (8.0 if s.ads_open else 0.0), "drywell_h2": 0.0,
@@ -293,20 +302,20 @@ class BWRSession:
                     "turbine_inlet": p_psig - 30.0 if s.msiv > 0.5 else 0.0,
                     "first_stage": 0.6 * p_psig * min(1.0, s.tcv) * (1.0 if not s.turbine_tripped else 0.0),
                     "turbine_speed": self.turbine_speed, "tcv": 100 * s.tcv, "bypass": 100 * s.bypass,
-                    "vacuum": 28.5 if s.condenser_available else 8.0, "hotwell_temp": 101.0 if s.condenser_available else 160.0,
                     "gen_mw": gen_mw, "gen_mvar": 0.25 * gen_mw if gen_mw else 0.0, "gen_kv": 22.0 if self.gen_breaker else 0.0,
                     "gen_hz": 60.0 if self.gen_breaker else self.turbine_speed / 30.0, "gen_amps": gen_mw / 22.0 / math.sqrt(3) if gen_mw else 0.0,
                     "gen_h2": 60.0,
                     "rfpt_speed": 5200.0 * (s.feed_flow / rated_steam) ** 0.5 if running_feed and rated_steam else 0.0,
-                    "rfp_flow": s.feed_flow / MLB_H / 3, "hotwell_level": 30.0, "cond_pump": 450.0 if s.condenser_available else 0.0,
-                    "msl_rad": 3.0 * pct / 100, "bus_4kv": 4.16, "diesel_kw": 2800.0 if cond["diesel_start"] else 0.0,
-                    "dc_bus": 128.0, "grid_kv": 525.0,
+                    "rfp_flow": s.feed_flow / MLB_H / 3, "hotwell_level": 30.0,
+                    "msl_rad": 3.0 * pct / 100,
+                    **self.aux.readings(s, gen_mw),
                     "mode": 3 if s.mode == "run" else 2,
                     "three_element": 2, "irm_range": 2, "slc": 1 if self.slc_running else 0,
                     "srv_sw": list(self.srv_switch),
                 },
                 "lamps": {
                     **cond,
+                    **self.aux.lamps(),
                     "not_scrammed": not s.scrammed, "scram_pilot": not s.scrammed,
                     "recirc_a_run": speeds[0] > 0.05 and not s.pumps[0].tripped, "recirc_a_stopped": s.pumps[0].tripped or speeds[0] <= 0.05,
                     "recirc_b_run": speeds[1] > 0.05 and not s.pumps[1].tripped, "recirc_b_stopped": s.pumps[1].tripped or speeds[1] <= 0.05,
@@ -370,10 +379,14 @@ class BWRSession:
                     raise CommandError("direction must be in, out or stop")
                 if s.scrammed and direction != "stop":
                     raise CommandError("Rod block: reactor scrammed")
+                if direction != "stop" and not self.aux.crd_ok():
+                    raise CommandError("No drive water: start a CRD pump")
                 s.drive_rods(direction)
             elif action == "rod_notch":
                 if s.scrammed:
                     raise CommandError("Rod block: reactor scrammed")
+                if not self.aux.crd_ok():
+                    raise CommandError("No drive water: start a CRD pump")
                 n = float(a.get("notches", 1.0))
                 (s.withdraw_rods if n > 0 else s.insert_rods)(abs(n))
                 ev("operator", f"Rod {self.rod_selected} {'withdrawn' if n > 0 else 'inserted'} {abs(n):g} notch")
@@ -383,6 +396,8 @@ class BWRSession:
                 i = {"a": 0, "b": 1}[a["pump"].lower()]
                 pump = s.pumps[i]
                 if pump.tripped or pump.speed < 0.05:
+                    if not self.aux.offsite:
+                        raise CommandError("No power to the recirculation MG sets (offsite power lost)")
                     pump.tripped = False
                     pump.demand = max(pump.demand, d.min_pump_speed)
                     ev("operator", f"Recirculation pump {a['pump'].upper()} started")
@@ -398,6 +413,8 @@ class BWRSession:
                 ev("operator", f"Level set point {sp_:.0f} in")
             elif action == "feed_pump":
                 if s.feed_tripped:
+                    if not self.aux.count("cond_pump"):
+                        raise CommandError("Feed pump suction pressure low: start a condensate pump first")
                     s.restore_feedwater()
                     ev("operator", "Feed pumps restarted")
                 else:
@@ -467,6 +484,13 @@ class BWRSession:
                 ev("operator", "Generator breaker " + ("closed" if self.gen_breaker else "opened"))
             elif action == "station_blackout":
                 s.station_blackout()
+                self.aux.lose_offsite(s.t)
+            elif action == "aux":
+                sp = d.setpoints
+                self.aux.command(s, s.t, str(a["equip"]), str(a.get("unit", "")), self.slc_running, {
+                    "level_l2": s.level2_latched or s.level_in <= sp.level2_in,
+                    "drywell_press": s.ads_open or (any(s.srv_open) and s.torus_temp > 60),
+                })
             elif action == "ann_ack":
                 for v in self.ann.values():
                     v["acked"] = True

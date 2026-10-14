@@ -125,3 +125,9 @@ specification (NEA/NSC/DOC(2001)1) can be read in full.
   instruments read true values, and the systems the model does not carry (drywell pressure,
   torus level, generator electrical values, feed pump turbine speeds) show plausible fixed or
   derived numbers so the panels are complete.
+- The balance of plant and auxiliaries on the side benchboards (condensate, feedwater heater
+  strings, circulating water and condenser vacuum, air ejectors and offgas, RWCU, CRD hydraulics,
+  instrument air, HPSW and RHR torus cooling, reactor building HVAC and SGTS, the four diesel
+  generators, radiation monitors) are simple lumped models in `reactorsim/app/bwr_aux.py` with
+  typical or assumed numbers: vacuum trip 22.5 inHg and MSIV closure at 7 inHg, scram on scram
+  air header below 60 psig, about 1 MW/K per RHR heat exchanger loop, 10 s diesel start.

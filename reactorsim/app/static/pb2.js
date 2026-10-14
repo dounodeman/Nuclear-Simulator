@@ -68,6 +68,11 @@ function control(role, args, mesh) {
   const label = mesh?.userData?.label || role;
   const m = /^srv_(\d+)$/.exec(role);
   if (m) return cmd("srv", { valve: +m[1] });
+  // pumps, heater strings, fans and diesels on the auxiliary benchboards: "aux:<equipment>:<unit>"
+  if (role.startsWith("aux:")) {
+    const [, equip, unit] = role.split(":");
+    return cmd("aux", { equip, unit });
+  }
   const fp = /^feed_pump_[abc]$/.test(role);
   switch (role) {
     case "info": return setPrompt(label);
