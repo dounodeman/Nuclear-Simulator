@@ -2,6 +2,7 @@
 // Every control is on the boards (pb2world.js); the menu only sets the speed, restarts the
 // plant and holds the instructor's faults.
 import { RoomWorld, ROD_GRID } from "./pb2world.js";
+import { RoomSound } from "./pb2audio.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -11,6 +12,7 @@ let state = null;
 let world = null;
 let eventsAfter = 0;
 let run = null;
+const sound = new RoomSound();
 const hist = [];           // [{t, r}] recent readings for the recorders
 const HIST_MAX = 4000;
 const log = [];
@@ -86,10 +88,8 @@ function control(role, args, mesh) {
     case "recirc_pump_b": return cmd("recirc_pump", { pump: "b" });
     case "recirc_raise": return cmd("recirc_speed", { delta: 2 });
     case "recirc_lower": return cmd("recirc_speed", { delta: -2 });
-    case "recirc_auto": return setPrompt("Recirculation flow control is in manual (speed demand)");
     case "level_sp_raise": case "feed_raise": return cmd("level_setpoint", { delta: 1 });
     case "level_sp_lower": case "feed_lower": return cmd("level_setpoint", { delta: -1 });
-    case "feed_auto": return setPrompt("Feedwater level control is in automatic, three-element");
     case "hpci": case "rcic": case "core_spray": case "lpci": return cmd(role);
     case "hpci_avail": return cmd("available", { system: "hpci", available: !L.hpci_avail });
     case "rcic_avail": return cmd("available", { system: "rcic", available: !L.rcic_avail });
@@ -180,6 +180,7 @@ function enterRoom() {
   document.body.classList.remove("main-menu");
   $("#menuTitle").textContent = "Peach Bottom Unit 2 - Menu";
   showMenu(false);
+  sound.start();   // needs the click on "Enter" before the browser will play anything
   if (!world) return;
   world.setActive(true);
   world.lock();
@@ -212,6 +213,17 @@ function buildMenu() {
   $("#sboBtn").addEventListener("click", () => cmd("station_blackout"));
   $("#lofwBtn").addEventListener("click", () => cmd("feed_pump"));
   $("#fullscreenBtn").addEventListener("click", toggleFullscreen);
+  const prefs = (() => { try { return JSON.parse(localStorage.getItem("pb2.sound") || "{}"); } catch { return {}; } })();
+  if (typeof prefs.on === "boolean") $("#soundOn").checked = prefs.on;
+  if (typeof prefs.vol === "number") $("#soundVol").value = prefs.vol;
+  const applySound = () => {
+    sound.setEnabled($("#soundOn").checked);
+    sound.setVolume(+$("#soundVol").value);
+    try { localStorage.setItem("pb2.sound", JSON.stringify({ on: $("#soundOn").checked, vol: +$("#soundVol").value })); } catch { /* private window */ }
+  };
+  $("#soundOn").addEventListener("change", () => { sound.start(); applySound(); });
+  $("#soundVol").addEventListener("input", () => { sound.start(); applySound(); });
+  applySound();
   $("#enterBtn").addEventListener("click", enterRoom);
   document.addEventListener("keydown", (e) => {
     if (e.code === "KeyF" && !e.target.closest?.("input, select, textarea")) { e.preventDefault(); toggleFullscreen(); }

@@ -26,10 +26,9 @@ import math
 from models.pur1.common import MeshBuilder, box, empty, flat_text
 from models.peach_bottom import panels as P
 from models.peach_bottom.panels import (ANN_COL_W, annunciator_box, control_switch, core_display, digital,
-                                        document_pocket, face_frame, fill_meters, fill_square_buttons, fill_switches,
-                                        flat_screen, keypad_display, keyswitch, lamp, ma_station, meter, nameplate,
-                                        panel_seams, pushbutton, recorder, rod_select_matrix, square_button,
-                                        stencil_plate, thumbwheel)
+                                        document_pocket, face_frame, flat_screen, keypad_display, keyswitch, lamp,
+                                        ma_station, meter, nameplate, panel_seams, pushbutton, recorder,
+                                        rod_select_matrix, square_button, stencil_plate, thumbwheel)
 
 ROOM_X = (-10.0, 10.0)
 ROOM_Y = (-7.5, 7.5)
@@ -149,7 +148,7 @@ def build_p603(parent):
     control_switch(b, "RecircPumpB", -2.45, 0.12, role="recirc_pump_b", label="Recirculation pump B: start / stop",
                    positions=["STOP", "", "START"], tag="recirc_b_run", light_tags=("recirc_b_run", "recirc_b_stopped"))
     ma_station(b, "RecircSpeed", -2.75, 0.02, tag="recirc_demand", setpoint_tag="recirc_demand", lo=0, hi=100, unit="%",
-               legend="RECIRC MG SET SPEED", role_up="recirc_raise", role_down="recirc_lower", role_auto="recirc_auto",
+               legend="RECIRC MG SET SPEED", role_up="recirc_raise", role_down="recirc_lower",
                label="Recirculation flow control: pump speed demand")
     nameplate(b, "RECIRC FLOW CONTROL", -2.75, -0.25, size=0.010)
     for i, pump in enumerate("AB"):
@@ -182,10 +181,8 @@ def build_p603(parent):
     thumbwheel(b, "LevelSetpoint", -2.15, 0.20, tag="level_setpoint", digits=3, legend="LEVEL SETPOINT (in)",
                role_up="level_sp_raise", role_down="level_sp_lower", label="Reactor water level set point")
     ma_station(b, "LevelControl", -1.95, 0.0, tag="feed_demand", setpoint_tag="level_setpoint", lo=0, hi=120, unit="%",
-               legend="FW LEVEL CONTROL", role_up="feed_raise", role_down="feed_lower", role_auto="feed_auto",
+               legend="FW LEVEL CONTROL", role_up="feed_raise", role_down="feed_lower",
                label="Feedwater level control station (3-element)")
-    control_switch(b, "ElementSel", -1.75, 0.18, role="info", label="Level control: 3-element / 1-element selector",
-                   positions=["1 ELEM", "", "3 ELEM"], tag="three_element", lights=(), spring=False, radius=0.022)
     for i, pump in enumerate("ABC"):
         control_switch(b, f"FeedPump{pump}", -1.70 + i * 0.16, -0.14, role=f"feed_pump_{pump.lower()}",
                        label=f"Reactor feed pump {pump}: trip / reset", positions=["TRIP", "", "RUN"], tag="feed_run",
@@ -218,8 +215,6 @@ def build_p603(parent):
     pushbutton(b, "RodNotchOut", -0.12, 0.05, "black", role="rod_notch_out", label="Rod out notch")
     pushbutton(b, "RodContOut", 0.02, 0.05, "black", role="rod_out", label="Continuous rod out (hold)")
     nameplate(b, "IN       NOTCH OUT      CONT OUT", -0.12, -0.02, size=0.007)
-    control_switch(b, "NotchOverride", -0.12, -0.16, role="info", label="Rod out notch override switch",
-                   positions=["", "NORMAL", "OVERRIDE"], tag="", lights=(), radius=0.022)
     lamp(b, "RodOutPermit", 0.12, 0.25, "green", tag="rod_out_permit", label="Rod out permissive")
     lamp(b, "RodBlock", 0.12, 0.20, "amber", tag="rod_block", label="Rod block")
     lamp(b, "RodDrift", 0.12, 0.15, "amber", tag="rod_drift", label="Rod drift")
@@ -227,7 +222,6 @@ def build_p603(parent):
     keyswitch(b, "ModeSwitch", 0.38, 0.12, role="mode_switch", label="Reactor mode switch (SHUTDOWN / REFUEL / STARTUP / RUN)",
               positions=["SHUTDOWN", "REFUEL", "STARTUP", "RUN"], tag="mode")
     nameplate(b, "REACTOR MODE SWITCH", 0.38, -0.02, size=0.009)
-    nameplate(b, "SHUTDOWN  REFUEL  STARTUP  RUN", 0.38, 0.22, size=0.007)
     pushbutton(b, "ScramA", 0.72, -0.08, "red", role="scram", label="Manual SCRAM, channel A", radius=0.022,
                collar="collar_yellow", mushroom=True)
     pushbutton(b, "ScramB", 0.86, -0.08, "red", role="scram", label="Manual SCRAM, channel B", radius=0.022,
@@ -250,15 +244,6 @@ def build_p603(parent):
     meter(v, "Period", 2.30, 1.92, w=0.09, h=0.19, tag="period", lo=-100, hi=100, unit="s", legend="RX PERIOD", kind="round")
     recorder(v, "RecAPRM", 1.45, 1.38, tags=["aprm", "core_flow"], lo=0, hi=125, unit="%", legend="APRM / CORE FLOW")
     recorder(v, "RecIRM", 1.95, 1.38, tags=["irm", "srm"], lo=0, hi=125, unit="%", legend="IRM / SRM")
-    nameplate(b, "IRM RANGE  A  B  C  D  E  F  G  H", 1.45, 0.26, size=0.008)
-    for i, ch in enumerate("ABCDEFGH"):
-        control_switch(b, f"IRMRange_{ch}", 1.22 + i * 0.075, 0.12, role="info", label=f"IRM {ch} range switch (1-10)",
-                       positions=["1", "5", "10"], tag="irm_range", lights=(), spring=False, radius=0.018)
-    control_switch(b, "IRMBypass", 1.35, -0.12, role="info", label="IRM bypass joystick", positions=["A", "", "H"],
-                   tag="", lights=(), spring=False, radius=0.024)
-    control_switch(b, "APRMBypass", 1.70, -0.12, role="info", label="APRM bypass joystick", positions=["A", "", "F"],
-                   tag="", lights=(), spring=False, radius=0.024)
-    nameplate(b, "IRM BYPASS     APRM BYPASS", 1.52, -0.27, size=0.008)
 
     # --- RPS and rod control status (far right)
     nameplate(v, "REACTOR PROTECTION", 2.95, 2.12, size=0.016)
@@ -288,8 +273,6 @@ def build_p603(parent):
     control_switch(b, "RPSReset", 2.60, 0.10, role="scram_reset", label="RPS trip reset (both channels)",
                    positions=["", "NORMAL", "RESET"], tag="", lights=(), radius=0.022)
     nameplate(b, "RPS RESET", 2.60, -0.06, size=0.008)
-    control_switch(b, "Historian", 2.85, -0.18, role="info", label="Sequence of events recorder: run / hold",
-                   positions=["HOLD", "", "RUN"], tag="", lights=(), spring=False, radius=0.018)
     return fr
 
 
@@ -343,8 +326,6 @@ def build_p601(parent):
     nameplate(b, "HPCI", -2.10, 0.30, size=0.011)
     control_switch(b, "HPCI", -2.25, 0.12, role="hpci", label="HPCI: start / stop", positions=["STOP", "", "START"],
                    tag="hpci_run", light_tags=("hpci_run", "hpci_stopped"))
-    control_switch(b, "HPCIInj", -2.05, 0.12, role="info", label="HPCI injection valve", positions=["CLOSE", "", "OPEN"],
-                   tag="hpci_run", light_tags=("hpci_run", "hpci_stopped"), radius=0.022)
     control_switch(b, "HPCIAvail", -2.15, -0.16, role="hpci_avail", label="HPCI: in service / out of service (instructor)",
                    positions=["OOS", "", "SERVICE"], tag="hpci_avail", lights=("white",), light_tags=("hpci_avail",),
                    spring=False, radius=0.018)
@@ -363,15 +344,7 @@ def build_p601(parent):
     for i, loop in enumerate("ABCD"):
         control_switch(b, f"RHRPump{loop}", -0.65 + i * 0.2, 0.12, role="lpci", label=f"RHR pump {loop} (LPCI): start / stop",
                        positions=["STOP", "", "START"], tag="lpci_run", light_tags=("lpci_run", "lpci_stopped"))
-    control_switch(b, "RHRMode", -0.35, -0.16, role="info", label="RHR mode: LPCI / suppression pool cooling / shutdown cooling",
-                   positions=["SP COOL", "LPCI", "SDC"], tag="", lights=(), spring=False, radius=0.022)
     # RHR and core spray injection valves: square red (open) / green (closed) pushbuttons in a row
-    for i, vlv in enumerate(["RHR INJ A", "RHR INJ B", "RHR INJ C", "RHR INJ D", "CS INJ A", "CS INJ B"]):
-        square_button(b, f"Valve{i}_Open", -1.0 + i * 0.07, -0.22, "red", role="info", label=f"{vlv} valve: open",
-                      lamp_tag="lpci_run" if vlv.startswith("RHR") else "cs_run")
-        square_button(b, f"Valve{i}_Close", -1.0 + i * 0.07, -0.29, "green", role="info", label=f"{vlv} valve: closed",
-                      lamp_tag="lpci_stopped" if vlv.startswith("RHR") else "cs_stopped")
-    nameplate(b, "INJECTION VALVES   RHR A  B  C  D   CS A  B", -0.82, -0.35, size=0.007)
     keypad_display(b, "ECCSFlow", 0.80, -0.20, tag="eccs_flow", digits=5, legend="TOTAL ECCS FLOW GPM",
                    label="ECCS flow digital display")
     nameplate(b, "ADS", 0.35, 0.30, size=0.011)
@@ -454,23 +427,16 @@ def build_p653(parent):
     nameplate(b, "RESET", -1.70, -0.08, size=0.008)
     nameplate(b, "EHC PRESSURE REGULATOR", -1.20, 0.32, size=0.010)
     ma_station(b, "PressReg", -1.30, 0.02, tag="pressure", setpoint_tag="pressure_setpoint", lo=900, hi=1100, unit="psig",
-               legend="PRESS SETPOINT", role_up="press_sp_raise", role_down="press_sp_lower", role_auto="info",
+               legend="PRESS SETPOINT", role_up="press_sp_raise", role_down="press_sp_lower",
                label="EHC pressure regulator set point (psig)")
     control_switch(b, "BypassJack", -1.05, 0.10, role="bypass_avail", label="Bypass valves: in service / out of service",
                    positions=["OOS", "", "SERVICE"], tag="bypass_avail", lights=("white",), light_tags=("bypass_avail",),
                    spring=False, radius=0.022)
     nameplate(b, "BYPASS VALVES", -1.05, -0.08, size=0.008)
-    control_switch(b, "LoadSel", -0.80, 0.10, role="info", label="Load set: raise / lower (EHC)",
-                   positions=["LOWER", "", "RAISE"], tag="", lights=(), radius=0.022)
-    nameplate(b, "LOAD SET", -0.80, -0.08, size=0.008)
     nameplate(b, "GENERATOR", 0.30, 0.30, size=0.011)
     control_switch(b, "GenBreaker", 0.15, 0.10, role="gen_breaker", label="Generator output breaker: close / trip",
                    positions=["TRIP", "", "CLOSE"], tag="gen_breaker", light_tags=("gen_breaker", "gen_breaker_open"))
-    control_switch(b, "GenField", 0.45, 0.10, role="info", label="Generator field breaker", positions=["TRIP", "", "CLOSE"],
-                   tag="gen_breaker", light_tags=("gen_breaker", "gen_breaker_open"))
-    control_switch(b, "Sync", 0.75, 0.10, role="info", label="Synchroscope switch", positions=["OFF", "", "ON"],
-                   tag="", lights=(), spring=False, radius=0.022)
-    nameplate(b, "OUTPUT BKR    FIELD BKR    SYNCHROSCOPE", 0.45, -0.08, size=0.007)
+    nameplate(b, "OUTPUT BREAKER", 0.15, -0.08, size=0.007)
     nameplate(b, "REACTOR FEED PUMP TURBINES  A   B   C", 1.60, 0.30, size=0.010)
     for i, pump in enumerate("ABC"):
         control_switch(b, f"RFPT{pump}", 1.35 + i * 0.22, 0.10, role=f"feed_pump_{pump.lower()}", label=f"Feed pump turbine {pump}: start / trip",
@@ -481,17 +447,6 @@ def build_p653(parent):
     nameplate(b, "CONDENSER", 2.15, -0.08, size=0.008)
     pushbutton(b, "SBO", 2.15, -0.22, "black", role="station_blackout", label="Instructor: station blackout (loss of all AC)", radius=0.010)
     nameplate(b, "SBO", 2.15, -0.30, size=0.007)
-    for i, pump in enumerate("ABC"):
-        square_button(b, f"CondPump{pump}_Run", 0.95 + i * 0.07, -0.22, "red", role="info", label=f"Condensate pump {pump}: running",
-                      lamp_tag="condenser_avail")
-        square_button(b, f"CondPump{pump}_Stop", 0.95 + i * 0.07, -0.29, "green", role="info", label=f"Condensate pump {pump}: stopped",
-                      lamp_tag="")
-    for i, pump in enumerate("ABC"):
-        square_button(b, f"CircPump{pump}_Run", 1.25 + i * 0.07, -0.22, "red", role="info", label=f"Circulating water pump {pump}: running",
-                      lamp_tag="condenser_avail")
-        square_button(b, f"CircPump{pump}_Stop", 1.25 + i * 0.07, -0.29, "green", role="info", label=f"Circulating water pump {pump}: stopped",
-                      lamp_tag="")
-    nameplate(b, "COND PUMPS  A  B  C     CIRC WTR PUMPS  A  B  C", 1.12, -0.35, size=0.007)
     return fr
 
 
@@ -623,112 +578,27 @@ def _chair(parent, m, origin, name, facing, tall=False):
     fr.build(f"{name}_Frame", m["chrome"], root)
 
 
-# What packs the empty space on each board (fillers in panels.py): meters as (tag, lo, hi, unit,
-# legend), switches and square buttons as (label, lamp when open/on, lamp when closed/off).
-DENSE = {
-    "P603": dict(
-        meters=[("pressure", 0, 1500, "psig", "RX PRESS"), ("level", 0, 60, "in", "RX LEVEL NR"),
-                ("feed_flow", 0, 20, "Mlb/h", "FW FLOW"), ("msl_flow", 0, 5, "Mlb/h", "MS LINE FLOW"),
-                ("recirc_flow_a", 0, 50, "Mlb/h", "RECIRC LOOP A"), ("recirc_flow_b", 0, 50, "Mlb/h", "RECIRC LOOP B"),
-                ("core_dp", 0, 30, "psid", "CORE PLATE dP"), ("feed_temp", 0, 500, "F", "FW TEMP"),
-                ("aprm", 0, 125, "%", "APRM"), ("irm", 0, 125, "%", "IRM")],
-        switches=[("Feedwater inlet valve", "feed_run", "feed_stopped"),
-                  ("Recirc pump A discharge valve", "recirc_a_run", "recirc_a_stopped"),
-                  ("Recirc pump B discharge valve", "recirc_b_run", "recirc_b_stopped"),
-                  ("Main steam line drain valve", "msiv_open", "msiv_closed")],
-        buttons=[("Recirc MG set A lube oil pump", "recirc_a_run", "recirc_a_stopped"),
-                 ("Recirc MG set B lube oil pump", "recirc_b_run", "recirc_b_stopped"),
-                 ("Heater drain pump", "feed_run", "feed_stopped")],
-        plate="REACTOR AUXILIARY VALVES"),
-    "P601": dict(
-        meters=[("hpci_flow", 0, 6000, "gpm", "HPCI FLOW"), ("rcic_flow", 0, 800, "gpm", "RCIC FLOW"),
-                ("lpci_flow_a", 0, 12000, "gpm", "RHR FLOW"), ("cs_flow_a", 0, 8000, "gpm", "CS FLOW"),
-                ("torus_temp", 0, 250, "F", "TORUS TEMP"), ("drywell_pressure", -5, 80, "psig", "DW PRESS"),
-                ("level", -300, 60, "in", "FUEL ZONE LVL"), ("pressure", 0, 1500, "psig", "RX PRESS")],
-        switches=[("HPCI steam supply valve", "hpci_run", "hpci_stopped"),
-                  ("RCIC steam supply valve", "rcic_run", "rcic_stopped"),
-                  ("Core spray injection valve", "cs_run", "cs_stopped"),
-                  ("RHR LPCI injection valve", "lpci_run", "lpci_stopped"),
-                  ("Outboard MSIV", "msiv_open", "msiv_closed")],
-        buttons=[("RHR service water pump", "lpci_run", "lpci_stopped"),
-                 ("Core spray room cooler", "cs_run", "cs_stopped"),
-                 ("HPCI auxiliary oil pump", "hpci_run", "hpci_stopped")],
-        plate="ECCS VALVES   CLOSE - OPEN"),
-    "P653": dict(
-        meters=[("msl_flow", 0, 5, "Mlb/h", "MS LINE FLOW"), ("turbine_speed", 0, 2000, "rpm", "TURB SPEED"),
-                ("vacuum", 0, 30, "in Hg", "COND VACUUM"), ("first_stage", 0, 800, "psig", "1ST STAGE"),
-                ("hotwell_level", 0, 60, "in", "HOTWELL LVL"), ("rfpt_speed", 0, 6000, "rpm", "RFPT SPEED"),
-                ("rfp_flow", 0, 10, "Mlb/h", "RFP FLOW"), ("tcv", 0, 100, "%", "CV POSITION"),
-                ("bypass", 0, 100, "%", "BPV POSITION"), ("gen_mw", 0, 1200, "MWe", "GEN MW")],
-        switches=[("Turbine stop valve test", "tsv_open", "tsv_closed"),
-                  ("Feed pump discharge valve", "feed_run", "feed_stopped"),
-                  ("Extraction steam valve", "turbine_latched", "turbine_tripped"),
-                  ("Unit auxiliary breaker", "gen_breaker", "gen_breaker_open")],
-        buttons=[("Condensate booster pump", "feed_run", "feed_stopped"),
-                 ("Turbine bearing lift pump", "turbine_latched", "turbine_tripped"),
-                 ("Circulating water pump", "condenser_avail", "condenser_low")],
-        plate="TURBINE AUXILIARY VALVES"),
-    "P602": dict(
-        meters=[("torus_temp", 0, 250, "F", "TORUS TEMP"), ("drywell_temp", 0, 350, "F", "DW TEMP"),
-                ("drywell_h2", 0, 10, "%", "DW H2"), ("torus_level", -10, 10, "in", "TORUS LVL"),
-                ("torus_pressure", -5, 80, "psig", "TORUS PRESS"), ("rhr_hx", 0, 12000, "gpm", "RHR HX FLOW")],
-        switches=[("RHR heat exchanger valve", "lpci_run", "lpci_stopped"),
-                  ("Containment isolation valve", "msiv_open", "msiv_closed")],
-        plate="CONTAINMENT ISOLATION"),
-    "P652": dict(
-        meters=[("bus_4kv", 0, 5, "kV", "4 kV BUS"), ("dc_bus", 0, 150, "V", "125 V DC"),
-                ("diesel_kw", 0, 4000, "kW", "DG LOAD"), ("gen_kv", 0, 30, "kV", "GEN VOLTS"),
-                ("grid_kv", 0, 600, "kV", "500 kV LINE")],
-        switches=[("4 kV feeder breaker", "gen_breaker", "gen_breaker_open")],
-        plate="4 kV BREAKERS   TRIP - CLOSE"),
-}
-
-
-def densify(name, fr):
-    """Pack the free space of one board the way the photos show it: meter banks between the
-    main indications, a long row of valve switches low on the vertical section and rows of
-    square illuminated pushbuttons and more switches on the bench."""
-    d = DENSE[name]
-    v, W = fr["vert"], fr["width"]
-    r0, r1 = -W / 2 + 0.06, W / 2 - 0.06
-    if "bench" in fr:
-        for z in (1.92, 1.66):
-            fill_meters(v, f"{name}_Dense{int(z * 100)}", r0, r1, z, d["meters"])
-        fill_switches(v, f"{name}_Valves", r0, r1, 1.07, d["switches"], plate=d["plate"])
-        b = fr["bench"]
-        fill_square_buttons(b, f"{name}_SqBtns", r0, r1, -0.30, d["buttons"])
-        fill_switches(b, f"{name}_BenchSw", r0, r1, 0.17, d["switches"], radius=0.016, pitch=0.075)
-    else:   # full-height corner panels: meters down to waist height, switches below
-        for z in (1.85, 1.53, 1.22):
-            fill_meters(v, f"{name}_Dense{int(z * 100)}", r0, r1, z, d["meters"], group=4)
-        fill_switches(v, f"{name}_Valves", r0, r1, 0.98, d["switches"], plate=d["plate"])
-        fill_switches(v, f"{name}_Valves2", r0, r1, 0.72, d["switches"])
-
-
 def build_control_room(parent=None):
     """Whole room, ready to export."""
     root = parent or empty("PB2_ControlRoom")
-    P.reset_layout()
     build_room(root)
-    densify("P603", build_p603(root))
-    densify("P601", build_p601(root))
-    densify("P653", build_p653(root))
+    build_p603(root)
+    build_p601(root)
+    build_p653(root)
     c = 0.78
-    p602 = build_corner(root, "P602", (-3.6 - c, 4.0 - c, 0.0), 3 * math.pi / 4, "P602  RHR / CONTAINMENT", [
+    build_corner(root, "P602", (-3.6 - c, 4.0 - c, 0.0), 3 * math.pi / 4, "P602  RHR / CONTAINMENT", [
         ("P602_TorusT", "torus_temp", 0, 250, "F", "TORUS WATER TEMP"),
         ("P602_DWP", "drywell_pressure", -5, 80, "psig", "DRYWELL PRESSURE"),
         ("P602_DWT", "drywell_temp", 0, 350, "F", "DRYWELL TEMP"),
         ("P602_H2", "drywell_h2", 0, 10, "%", "DRYWELL H2"),
         ("P602_RHRHx", "rhr_hx", 0, 12000, "gpm", "RHR HX FLOW"),
     ], ann=ANN_P602)
-    densify("P602", p602)
-    p652 = build_corner(root, "P652", (3.6 + c, 4.0 - c, 0.0), math.pi / 4, "P652  STATION ELECTRICAL", [
+    build_corner(root, "P652", (3.6 + c, 4.0 - c, 0.0), math.pi / 4, "P652  STATION ELECTRICAL", [
         ("P652_4kV_A", "bus_4kv", 0, 5, "kV", "4 kV BUS A"),
         ("P652_4kV_B", "bus_4kv", 0, 5, "kV", "4 kV BUS B"),
         ("P652_DG", "diesel_kw", 0, 4000, "kW", "DIESEL GEN LOAD"),
         ("P652_125V", "dc_bus", 0, 150, "V", "125 V DC BUS"),
         ("P652_Grid", "grid_kv", 0, 600, "kV", "500 kV SWITCHYARD"),
     ], ann=ANN_P652)
-    densify("P652", p652)
     build_back_panels(root)
     return root

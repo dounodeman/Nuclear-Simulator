@@ -92,9 +92,13 @@ full core display of red-lit rod modules on a black grid with its green readout,
 edgewise meters, pistol-grip switches with red/green lights, rows of square illuminated
 pushbuttons, blue keypad displays, a few flat screens, stencilled panel-number plates and
 yellow-tabbed document pockets on the console fronts, red doors and a map-style desk of
-laminated drawings. The boards are packed the way the photos show them: banks of small edgewise
-meters fill the space between each system's main indications and long rows of valve switches
-with red/green lights run under them, all still showing live readings. Every meter, recorder,
+laminated drawings. Only controls that work are on the boards: every switch and pushbutton
+acts on the plant. The rotary switches are modelled on the GE type SBM: an engraved black plate
+with the position legends above a chrome hub, a pistol grip for pump and breaker switches, an
+oval pointer knob for maintained selectors, keylocks for the mode switch, SLC and ADS inhibit,
+and domed red/green indicating lights over each. The room has its own background sound,
+synthesised in the page: air handling, the 60 Hz hum of ballasts and transformers, computer
+and cabinet fans, and the odd relay click (Room sound in the menu). Every meter, recorder,
 lamp and switch is driven by `BWRSimulator` through
 `reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
 engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).

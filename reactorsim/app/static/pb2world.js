@@ -16,6 +16,7 @@ const NO_COLLIDE = ["Ceiling", "CeilingGrid", "LightFixtures", "Sign_Unit2", "Wa
 
 const SANS = '-apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
 const MONO = '"SF Mono", Menlo, Consolas, monospace';
+const SWITCH_STEP = (n) => (n > 3 ? 0.6 : Math.PI / 4);
 const LAMP_RGB = { red: 0xff2a1a, green: 0x30ff50, amber: 0xffb020, white: 0xffffff, blue: 0x4080ff };
 
 // Annunciator window engravings, by key (models/peach_bottom/control_room.py ANN_*).
@@ -116,7 +117,8 @@ export class RoomWorld {
       if (!o.isMesh) return;
       const name = o.name || o.parent?.name || "";
       const ud = o.userData || {};
-      if (!NO_COLLIDE.includes(name) && !name.startsWith("Lettering_") && !name.startsWith("Glass_")) this.colliders.push(o);
+      const decal = name.startsWith("Lettering_") || name.startsWith("Glass_") || name.startsWith("Pointer_");
+      if (!NO_COLLIDE.includes(name) && !decal) this.colliders.push(o);
       if (ud.role || ud.label) {
         o.material = o.material.clone();
         o.userData.baseEmissive = o.material.emissive?.clone();
@@ -165,7 +167,7 @@ export class RoomWorld {
     mesh.geometry = g;
     const w = z1 - z0, h = y1 - y0;
     // pixels per metre: fine enough to read the engraving from the operator's stool
-    const scale = { ann: 2300, core: 2600, rodselect: 2000, drawing: 1600, screen: 2000 }[ud.face] || 3600;
+    const scale = { ann: 2300, core: 2600, rodselect: 2000, drawing: 1600, screen: 2000, switchplate: 4400 }[ud.face] || 3600;
     const cv = document.createElement("canvas");
     cv.width = Math.min(2048, Math.max(128, Math.round(w * scale)));
     cv.height = Math.min(2048, Math.max(128, Math.round(h * scale)));
@@ -372,7 +374,8 @@ export class RoomWorld {
         idx = typeof v === "number" ? v : (sw.ud.tag && L[sw.ud.tag] ? sw.n - 1 : 0);
         if (sw.n === 2 && typeof v !== "number") idx = sw.ud.tag && L[sw.ud.tag] ? 1 : 0;
       }
-      const angle = (idx - (sw.n - 1) / 2) * (sw.n > 3 ? 0.55 : 0.7);
+      // GE SBM switches index 45 degrees per position; the four-position mode switch about 34
+      const angle = (idx - (sw.n - 1) / 2) * SWITCH_STEP(sw.n);
       sw.mesh.rotation.set(angle, 0, 0);
       const p = sw.pivot.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), angle);
       sw.mesh.position.copy(sw.pivot).sub(p);
@@ -811,6 +814,7 @@ const SIG = {
   core: (ud, r, L, ann, s) => `${q(r.rod_notch)}|${r.rod_selected}|${s.scrammed}`,
   rodselect: (ud, r) => String(r.rod_selected),
   drawing: () => "static",
+  switchplate: () => "static",
   clock: (ud, r, L, ann, s) => String(Math.floor(s.time_s)),
 };
 
@@ -856,10 +860,38 @@ function surfaceTexture(mesh, ceiling) {
   mesh.material.needsUpdate = true;
 }
 
+// The engraved escutcheon of a rotary switch: the position legends around the top of the
+// plate, each at the angle the handle points to in that position (straight up is the middle).
+function drawSwitchPlate(f) {
+  const { ctx: g, cv, ud } = f;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#151515";
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = "#5a5a58"; g.lineWidth = Math.max(1, W / 90);
+  g.strokeRect(W * 0.04, H * 0.04, W * 0.92, H * 0.92);
+  const pos = String(ud.positions || "").split(",");
+  const n = pos.length, step = SWITCH_STEP(n);
+  // the hub sits low on the plate (ud.hub: its depth from the top as a fraction of the height)
+  const cx = W / 2, cy = H * (+ud.hub || 0.56), R = W * (+ud.lr || 0.37);
+  pos.forEach((p, i) => {
+    const a = (i - (n - 1) / 2) * step;   // from straight up, clockwise as the operator sees it
+    const sx = Math.sin(a), sy = -Math.cos(a);
+    g.strokeStyle = "#e8e6de"; g.lineWidth = Math.max(1, W / 60);
+    g.beginPath(); g.moveTo(cx + sx * R * 0.72, cy + sy * R * 0.72); g.lineTo(cx + sx * R * 0.82, cy + sy * R * 0.82); g.stroke();
+    if (!p) return;
+    const size = Math.min(W * (+ud.key ? 0.075 : 0.10), (W * (+ud.key ? 0.36 : 0.5)) / Math.max(3, p.length));
+    g.save();
+    g.translate(cx + sx * R, cy + sy * R);
+    g.rotate(a);
+    vText(g, p, 0, 0, size, "#f0eee6", "center", true);
+    g.restore();
+  });
+}
+
 const DRAW = {
   meter: drawMeter, round: drawRound, recorder: drawRecorder, digital: drawDigital, ma: drawMA,
   thumbwheel: drawThumbwheel, ann: drawAnn, core: drawCore, rodselect: drawRodSelect, clock: drawClock,
-  screen: drawScreen, drawing: drawDrawing,
+  screen: drawScreen, drawing: drawDrawing, switchplate: drawSwitchPlate,
 };
 
 export { ROD_GRID };
