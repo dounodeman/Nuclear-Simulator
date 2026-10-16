@@ -181,6 +181,8 @@ class BWRSimulator:
         self.level_setpoint_in = d.normal_level_in
         self.level_in = d.normal_level_in
         self.feed_temp = d.feedwater_temp_c
+        self.heater_fraction = 1.0  # share of the feedwater heater strings in service
+        self.feed_capacity = 1.0    # share of the feed pumps' capacity running (three pumps)
         self.condenser_available = True
         self.torus_temp = d.torus_initial_temp
 
@@ -422,8 +424,10 @@ class BWRSimulator:
             h_pool = 4186.0 * self.torus_temp  # enthalpy of the pool water above 0 C
             self.torus_temp += srv * (hg - h_pool) / (d.torus_water_mass * 4186.0) * h
 
-        # Feedwater heaters follow the turbine: without extraction steam the feed cools toward the condensate.
-        target = d.feedwater_temp_c if (not self.turbine_tripped and self.tsv > 0.5) else 110.0
+        # Feedwater heaters follow the turbine: without extraction steam the feed cools toward the
+        # condensate, and a heater string taken out of service passes its share of the feed cold.
+        heated = self.heater_fraction if (not self.turbine_tripped and self.tsv > 0.5) else 0.0
+        target = 110.0 + (d.feedwater_temp_c - 110.0) * heated
         self.feed_temp += (target - self.feed_temp) * (1 - math.exp(-h / 400.0))
 
         # Valves move toward their demands.
@@ -571,7 +575,7 @@ class BWRSimulator:
             rated = self._rated_steam_flow()
             err = self.level_setpoint_in - L
             self.feed_demand = min(max(self.steam_out + d.level_gain * rated * err, 0.0),
-                                   d.feedwater_max_fraction * rated)
+                                   d.feedwater_max_fraction * rated * self.feed_capacity)
 
         # Alarms.
         self._alarm(L <= sp.level4_alarm_in, "Reactor water level low")

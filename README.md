@@ -83,12 +83,51 @@ on the main menu, or `/pb2.html`): the Unit 2 horseshoe of GE benchboards in its
 with the reactor control benchboard (P603: full core display, APRM/IRM/SRM meters, rod select
 matrix and rod pushbuttons, mode switch, manual scram buttons, recirculation and feedwater
 stations), the core cooling benchboard (P601: HPCI, RCIC, core spray and RHR switches, the
-eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), with annunciator
-windows above each. Every meter, recorder, lamp and switch is driven by `BWRSimulator` through
+eleven SRV switches, ADS, MSIVs) and the turbine-generator benchboard (P653), plus the
+balance-of-plant and auxiliary benchboards along the side walls: CRD hydraulics and reactor
+water cleanup (P604), service water, RHR torus cooling and instrument air (P606), secondary
+containment and the radiation monitors (P605), condensate and the feedwater heaters (P650),
+circulating water, air ejectors and offgas (P651), and the four emergency diesel generators
+(P654). A BWR has no deaerator: the condenser hotwell deaerates the condensate under vacuum and
+the air ejectors carry the gases to offgas, so P650 shows hotwell dissolved oxygen instead. The
+equipment on those boards (`reactorsim/app/bwr_aux.py`) acts on the plant: a heater string out
+of service cools the feed and raises power, losing circulating water or the air ejectors loses
+vacuum (turbine trip, then MSIV closure), losing instrument air scrams the reactor, no CRD pump
+means no rod motion, no condensate pump trips the feed pumps, RWCU isolates on Level 2 and SLC,
+RHR torus cooling on service water cools the torus, and after a station blackout the diesels,
+started by hand, bring core spray and LPCI back. The automatic actions of the real plant are
+there too: each reactor feed pump trips and starts on its own switch, and losing one with Level 4
+low runs the recirculation pumps back to 45% speed so the other two can hold level; the standby
+air compressor starts on low header pressure (a pump stopped by hand stays off, as in
+pull-to-lock); the diesels start on a LOCA signal and run unloaded; on a loss of offsite power
+(instructor pushbutton on P654) the reactor scrams on lost RPS power, the diesels close onto
+their buses and the load sequencer restarts the safety loads; the four-position mode switch
+turns one detent at a time and SHUTDOWN scrams the reactor. Every switch carries its engraved
+name tag, the auxiliary benches have painted mimic lines, the annunciator horn sounds until the
+alarms are acknowledged, and the room has its supply diffusers, return grilles, smoke detectors,
+exit signs and emergency lights, fire extinguishers, the procedure bookcase and the alarm
+printer. The finish follows
+the project's reference photos of the Unit 2 boards: cream GE panels with black trim on maroon
+carpet under a white luminous ceiling, annunciator boxes of tall windows in lettered columns
+(A to J) and five numbered rows with their numbered title plates (301 F/W, 310/311 REACTOR,
+313/314 RECIRC, 321 HPCI, 322 RCIC, 323 RHR/CS, 302 RFPT, 303 COND, 305/306 TURBINE ...), the
+full core display of red-lit rod modules on a black grid with its green readout, banks of
+edgewise meters, pistol-grip switches with red/green lights, rows of square illuminated
+pushbuttons, blue keypad displays, a few flat screens, stencilled panel-number plates and
+yellow-tabbed document pockets on the console fronts, red doors and a map-style desk of
+laminated drawings. Only controls that work are on the boards: every switch and pushbutton
+acts on the plant. The rotary switches are modelled on the GE type SBM: an engraved black plate
+with the position legends above a chrome hub, a pistol grip for pump and breaker switches, an
+oval pointer knob for maintained selectors, keylocks for the mode switch, SLC and ADS inhibit,
+and domed red/green indicating lights over each. The room has its own background sound,
+synthesised in the page: air handling, the 60 Hz hum of ballasts and transformers, computer
+and cabinet fans, and the odd relay click (Room sound in the menu). Every meter, recorder,
+lamp and switch is driven by `BWRSimulator` through
 `reactorsim/app/bwr_session.py`; the faces are drawn live from the plant readings in the units
 engraved on the panels (psig, inches, Mlb/h, gpm, degrees F).
 
 ![Peach Bottom 2 control room](models/renders/pb2_control_room_overview.png)
+![Peach Bottom 2 annunciators](models/renders/pb2_control_room_annunciators.png)
 
 Every number, where it came from and which are still typical-BWR/4 stand-ins are in
 [docs/peach_bottom_2_reference.md](docs/peach_bottom_2_reference.md). The control-room

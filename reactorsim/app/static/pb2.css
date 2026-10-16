@@ -11,3 +11,6 @@
 .menu-card { width: min(380px, 92vw); }
 .group .form-row { display: flex; gap: 6px; }
 .group .form-row > button { flex: 1; }
+.sound-row { align-items: center; font: 11px var(--hmi-font); }
+.sound-row label { display: flex; align-items: center; gap: 4px; flex: 1; }
+.sound-row input[type="range"] { flex: 1; }

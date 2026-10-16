@@ -2,6 +2,7 @@
 // Every control is on the boards (pb2world.js); the menu only sets the speed, restarts the
 // plant and holds the instructor's faults.
 import { RoomWorld, ROD_GRID } from "./pb2world.js";
+import { RoomSound } from "./pb2audio.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -11,6 +12,7 @@ let state = null;
 let world = null;
 let eventsAfter = 0;
 let run = null;
+const sound = new RoomSound();
 const hist = [];           // [{t, r}] recent readings for the recorders
 const HIST_MAX = 4000;
 const log = [];
@@ -66,6 +68,11 @@ function control(role, args, mesh) {
   const label = mesh?.userData?.label || role;
   const m = /^srv_(\d+)$/.exec(role);
   if (m) return cmd("srv", { valve: +m[1] });
+  // pumps, heater strings, fans and diesels on the auxiliary benchboards: "aux:<equipment>:<unit>"
+  if (String(role || "").startsWith("aux:")) {
+    const [, equip, unit] = role.split(":");
+    return cmd("aux", { equip, unit });
+  }
   const fp = /^feed_pump_[abc]$/.test(role);
   switch (role) {
     case "info": return setPrompt(label);
@@ -86,10 +93,8 @@ function control(role, args, mesh) {
     case "recirc_pump_b": return cmd("recirc_pump", { pump: "b" });
     case "recirc_raise": return cmd("recirc_speed", { delta: 2 });
     case "recirc_lower": return cmd("recirc_speed", { delta: -2 });
-    case "recirc_auto": return setPrompt("Recirculation flow control is in manual (speed demand)");
     case "level_sp_raise": case "feed_raise": return cmd("level_setpoint", { delta: 1 });
     case "level_sp_lower": case "feed_lower": return cmd("level_setpoint", { delta: -1 });
-    case "feed_auto": return setPrompt("Feedwater level control is in automatic, three-element");
     case "hpci": case "rcic": case "core_spray": case "lpci": return cmd(role);
     case "hpci_avail": return cmd("available", { system: "hpci", available: !L.hpci_avail });
     case "rcic_avail": return cmd("available", { system: "rcic", available: !L.rcic_avail });
@@ -104,13 +109,14 @@ function control(role, args, mesh) {
     case "press_sp_lower": return cmd("pressure_setpoint", { delta: -5 });
     case "gen_breaker": return cmd("gen_breaker");
     case "station_blackout": return cmd("station_blackout");
+    case "loss_of_offsite_power": return cmd("loss_of_offsite_power");
     case "mode_switch": return cmd("mode_switch");
     case "slc": return cmd("slc");
     case "ann_ack": return cmd("ann_ack");
     case "ann_reset": return cmd("ann_reset");
     case "ann_test": return cmd("ann_test");
     default:
-      if (fp) return cmd("feed_pump");
+      if (fp) return cmd("feed_pump", { pump: role.slice(-1) });
       return setPrompt(`${label} (${r.mode || ""})`);
   }
 }
@@ -165,6 +171,7 @@ function render(s) {
   $("#rpsFail").setAttribute("aria-pressed", String(!!s.lamps.rps_trouble));
   $("#rpsFail").classList.toggle("on", !!s.lamps.rps_trouble);
   world?.update(s, hist);
+  sound.setAlarm(Object.values(s.annunciators || {}).includes("flash"));
 }
 
 // ------------------------------------------------------------------ menu
@@ -180,6 +187,7 @@ function enterRoom() {
   document.body.classList.remove("main-menu");
   $("#menuTitle").textContent = "Peach Bottom Unit 2 - Menu";
   showMenu(false);
+  sound.start();   // needs the click on "Enter" before the browser will play anything
   if (!world) return;
   world.setActive(true);
   world.lock();
@@ -212,6 +220,17 @@ function buildMenu() {
   $("#sboBtn").addEventListener("click", () => cmd("station_blackout"));
   $("#lofwBtn").addEventListener("click", () => cmd("feed_pump"));
   $("#fullscreenBtn").addEventListener("click", toggleFullscreen);
+  const prefs = (() => { try { return JSON.parse(localStorage.getItem("pb2.sound") || "{}"); } catch { return {}; } })();
+  if (typeof prefs.on === "boolean") $("#soundOn").checked = prefs.on;
+  if (typeof prefs.vol === "number") $("#soundVol").value = prefs.vol;
+  const applySound = () => {
+    sound.setEnabled($("#soundOn").checked);
+    sound.setVolume(+$("#soundVol").value);
+    try { localStorage.setItem("pb2.sound", JSON.stringify({ on: $("#soundOn").checked, vol: +$("#soundVol").value })); } catch { /* private window */ }
+  };
+  $("#soundOn").addEventListener("change", () => { sound.start(); applySound(); });
+  $("#soundVol").addEventListener("input", () => { sound.start(); applySound(); });
+  applySound();
   $("#enterBtn").addEventListener("click", enterRoom);
   document.addEventListener("keydown", (e) => {
     if (e.code === "KeyF" && !e.target.closest?.("input, select, textarea")) { e.preventDefault(); toggleFullscreen(); }

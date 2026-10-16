@@ -6,12 +6,22 @@ benchboards the operator stands inside, open to the south, with the reactor cont
 (P603) across the north, the core cooling benchboard (P601) on the operator's left and the
 turbine-generator benchboard (P653) on the right, joined by angled corner panels (P602 RHR and
 containment, P652 electrical). Vertical back panels for recorders and relays stand behind the
-horseshoe, and the shift supervisor's desk faces the boards from the open end.
+horseshoe, the balance-of-plant and auxiliary benchboards (P604 CRD/RWCU, P606 service water and
+air, P605 secondary containment and radiation monitors, P650 condensate and feedwater heaters,
+P651 circulating water and offgas, P654 diesel generators) line the side walls, and the shift
+supervisor's desk faces the boards from the open end. The auxiliary panel numbers are in the GE
+pattern but not checked against Peach Bottom's own.
 
 Panel numbers follow the GE pattern (the visual reference says to check them against the
 Peach Bottom UFSAR Chapter 7); the proportions (benchboard 0.95 m bench, 2.3 m vertical
-section, annunciator boxes above) are typical GE benchboards, not measured. Everything the
-operator can read or use is named ``ui_...`` and tagged for the page, see panels.py.
+section, annunciator boxes above) are typical GE benchboards, not measured. The finish follows
+the project's reference photos of the Unit 2 boards: cream panels with black trim, maroon
+carpet, a white luminous ceiling, red doors, annunciator boxes of tall windows in lettered
+columns and five numbered rows with numbered title plates (301 F/W, 302 RFPT, 303 COND,
+305/306 TURBINE, 310/311 REACTOR, 313/314 RECIRC, 321 HPCI, 322 RCIC, 323 RHR/CS ...), the
+full core display with its green readout, stencilled panel-number plates and yellow-tabbed
+document pockets on the console fronts, and a map-style mimic desk of laminated drawings.
+Everything the operator can read or use is named ``ui_...`` and tagged for the page, see panels.py.
 """
 from __future__ import annotations
 
@@ -19,9 +29,10 @@ import math
 
 from models.pur1.common import MeshBuilder, box, empty, flat_text
 from models.peach_bottom import panels as P
-from models.peach_bottom.panels import (annunciator_box, control_switch, core_display, digital, face_frame,
-                                        keyswitch, lamp, ma_station, meter, nameplate, pushbutton, recorder,
-                                        rod_select_matrix, thumbwheel)
+from models.peach_bottom.panels import (ANN_COL_W, annunciator_box, control_switch, core_display, digital,
+                                        document_pocket, face_frame, flat_screen, keypad_display, keyswitch, lamp,
+                                        ma_station, meter, mimic, nameplate, panel_seams, pushbutton, recorder,
+                                        rod_select_matrix, square_button, stencil_plate, thumbwheel)
 
 ROOM_X = (-10.0, 10.0)
 ROOM_Y = (-7.5, 7.5)
@@ -30,26 +41,40 @@ BENCH_DEPTH, BENCH_LOW, BENCH_HIGH = 0.72, 0.82, 0.95   # the sloped bench secti
 PANEL_DEPTH, PANEL_H = 0.55, 2.30                        # the vertical section behind it
 SPAWN = (0.0, -1.2, 0.0)                                 # inside the horseshoe, facing the reactor benchboard
 
+# Annunciator boxes by panel number, as the title plates in the reference photos read them.
+# Each is a 10-column (A to J) by 5-row box; the keys fill it row by row and the rest stay blank.
 ANN_P603 = [
-    "aprm_high", "aprm_flow", "aprm_setdown", "irm_high", "rod_block", "rod_drift", "select_error", "scram", "half_scram", "rps_trouble",
-    "level_low_l4", "level_low_l3", "level_high_l7", "level_high_l8", "pressure_high", "msl_low", "tsv_closure", "msiv_closure", "mode_startup", "exclusion",
-    "recirc_a_trip", "recirc_b_trip", "atws_rpt", "feed_trip", "level_l2", "level_l1", "core_uncovered", "fuel_damage", "srv_open", "spare",
+    ("301 F/W", [
+        "level_low_l4", "level_low_l3", "level_high_l7", "level_high_l8", "feed_trip", "feed_a_trip", "feed_b_trip", "feed_c_trip", "level_l2", "level_l1"]),
+    ("310 REACTOR", [
+        "aprm_high", "aprm_flow", "aprm_setdown", "irm_high", "rod_block", "rod_drift", "select_error", "scram", "half_scram", "rps_trouble",
+        "pressure_high", "msl_low", "tsv_closure", "msiv_closure", "mode_startup", "exclusion", "core_uncovered", "fuel_damage", "srv_open", "mode_shutdown"]),
+    ("311 REACTOR", [
+        "level_low_l3", "level_l2", "level_l1", "pressure_high", "scram", "atws_rpt", "half_scram", "rps_trouble", "msiv_closure", "spare"]),
+    ("313 RECIRC", ["recirc_a_trip", "exclusion", "atws_rpt", "aprm_flow", "recirc_runback"]),
+    ("314 RECIRC", ["recirc_b_trip", "exclusion", "atws_rpt", "aprm_flow"]),
 ]
 ANN_P601 = [
-    "hpci_init", "hpci_run", "rcic_init", "rcic_run", "cs_init", "cs_run", "lpci_init", "lpci_run",
-    "ads_timer", "ads_open", "ads_inhibit", "torus_temp", "torus_level", "drywell_press", "srv_open", "msiv_closure",
-    "hpci_unavail", "rcic_unavail", "cs_unavail", "lpci_unavail", "level_l2", "level_l1", "core_uncovered", "spare",
+    ("321 HPCI", ["hpci_init", "hpci_run", "hpci_unavail", "level_l2", "ads_timer", "ads_open", "ads_inhibit", "srv_open", "msiv_closure", "spare"]),
+    ("322 RCIC", ["rcic_init", "rcic_run", "rcic_unavail", "level_l2", "torus_temp", "torus_level", "drywell_press", "spare"]),
+    ("323 RHR/CS", ["cs_init", "cs_run", "cs_unavail", "lpci_init", "lpci_run", "lpci_unavail", "level_l1", "core_uncovered", "torus_temp", "drywell_press"]),
 ]
 ANN_P653 = [
-    "turbine_trip", "gen_breaker", "tsv_closure", "tcv_fast", "bypass_open", "bypass_unavail", "condenser_low", "ehc_trouble",
-    "level_high_l8", "pressure_high", "msl_low", "msiv_closure", "feed_trip", "feed_a_trip", "feed_b_trip", "feed_c_trip",
-    "station_blackout", "diesel_start", "spare", "spare", "spare", "spare", "spare", "spare",
+    ("302 RFPT", ["feed_a_trip", "feed_b_trip", "feed_c_trip", "feed_trip", "level_high_l8"]),
+    ("303 COND", ["condenser_low", "bypass_open", "bypass_unavail", "spare"]),
+    ("305 TURBINE", ["turbine_trip", "tsv_closure", "tcv_fast", "ehc_trouble", "pressure_high", "msl_low", "msiv_closure"]),
+    ("306 TURBINE", ["gen_breaker", "station_blackout", "diesel_start", "spare"]),
 ]
+ANN_P602 = [("307/308 ACDT MON", ["torus_temp", "torus_level", "drywell_press", "core_uncovered", "fuel_damage"])]
+ANN_P652 = [("309 DRS/DC PWR", ["station_blackout", "diesel_start", "gen_breaker"]), ("304 CIRC WTR", ["condenser_low"])]
 
 
-def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_rows=3, ann_cols=10, title=None):
+def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_cols=10, title=None, front=(), pockets=()):
     """One GE benchboard: a sloped bench section with the vertical panel behind it and the
-    annunciator box on top, built with the operator at local -X and turned by ``yaw``."""
+    annunciator boxes on top, built with the operator at local -X and turned by ``yaw``.
+    ``ann`` lists (title, keys) boxes set side by side along the top; ``front`` lists
+    (text, r) stencilled number plates and ``pockets`` the r of document pockets on the
+    console front below the bench."""
     m = P.mats()
     root = empty(name, origin, parent)
     root.rotation_euler = (0, 0, yaw)
@@ -62,7 +87,8 @@ def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_
         trim.box((-0.004, y, PANEL_H / 2 + 0.02), (0.008, 0.03, PANEL_H + 0.04))
     trim.box((-0.004, 0, PANEL_H + 0.015), (0.008, W + 0.03, 0.03))
     trim.build(f"{name}_Trim", m["panel_dark"], root)
-    frames = {"root": root, "vert": face_frame(f"{name}_VertFrame", root, (0, 0, 0))}
+    frames = {"root": root, "vert": face_frame(f"{name}_VertFrame", root, (0, 0, 0)), "width": W}
+    panel_seams(frames["vert"], f"{name}_Vert", W, BENCH_HIGH if with_bench else 0.05, PANEL_H - 0.02)
     if with_bench:
         x0, x1 = -BENCH_DEPTH, 0.0
         v = [(x0, -W / 2, 0), (x1, -W / 2, 0), (x1, W / 2, 0), (x0, W / 2, 0),
@@ -76,18 +102,36 @@ def benchboard(parent, name, origin, yaw, width, with_bench=True, ann=None, ann_
         box(f"{name}_Ledge", (x0 + 0.03, 0, BENCH_LOW + 0.012), (0.09, W, 0.024), m["panel_dark"], root)
         theta = math.atan2(BENCH_DEPTH, BENCH_HIGH - BENCH_LOW)        # tip of the bench frame
         frames["bench"] = face_frame(f"{name}_BenchFrame", root, ((x0 + x1) / 2, 0, (BENCH_LOW + BENCH_HIGH) / 2 + 0.002), pitch=theta)
+        panel_seams(frames["bench"], f"{name}_Bench", W, -0.35, 0.35)
+        # chrome nosing along the bench's front edge and a black rubber bumper under it
+        box(f"{name}_Nosing", (x0 + 0.004, 0, BENCH_LOW + 0.027), (0.012, W, 0.006), m["chrome"], root)
+        box(f"{name}_Bumper", (x0 - 0.004, 0, BENCH_LOW - 0.03), (0.016, W, 0.05), m["handle"], root)
+        # the console front under the bench: stencilled panel numbers and document pockets
+        front_frame = face_frame(f"{name}_FrontFrame", root, (x0, 0, 0))
+        frames["front"] = front_frame
+        for text, r in front:
+            stencil_plate(front_frame, text, r, 0.62)
+        for r in pockets:
+            document_pocket(front_frame, r, 0.36)
     if ann:
-        frames["ann"] = annunciator_box(root, f"Ann_{name}", 0.0, PANEL_H + 0.17 + ann_rows * 0.0375, min(W - 0.3, ann_cols * 0.24),
-                                        ann_rows, ann_cols, keys=ann)
+        n = len(ann)
+        bw = ann_cols * ANN_COL_W + 0.03
+        gap = max(0.06, (W - n * bw) / (n + 1))
+        total = n * bw + (n - 1) * gap
+        for i, (ttl, keys) in enumerate(ann):
+            r = -total / 2 + bw / 2 + i * (bw + gap)
+            frames[f"ann{i}"] = annunciator_box(root, f"Ann_{name}_{ttl.split()[0].replace('/', '_')}", r, PANEL_H + 0.33, bw,
+                                                5, ann_cols, keys=keys, title=ttl)
     if title:
-        nameplate(frames["vert"], title, 0.0, PANEL_H - 0.06, size=0.03, width=len(title) * 0.024 + 0.08)
+        nameplate(frames["vert"], title, 0.0, PANEL_H - 0.13 if ann else PANEL_H - 0.06, size=0.03, width=len(title) * 0.024 + 0.08)
     return frames
 
 
 # ----------------------------------------------------------------------------- P603 reactor control
 def build_p603(parent):
     fr = benchboard(parent, "P603", (0.0, 4.0, 0.0), math.pi / 2, 7.2, ann=ANN_P603,
-                    title="P603  REACTOR CONTROL")
+                    title="P603  REACTOR CONTROL", front=[("318  301  302", -2.4), ("303  304", 0.0), ("305  306", 2.4)],
+                    pockets=[-3.3, -1.3, 1.1, 3.2])
     v, b = fr["vert"], fr["bench"]
 
     # --- Recirculation (operator's far left)
@@ -101,6 +145,7 @@ def build_p603(parent):
     recorder(v, "RecCoreFlow", -2.85, 1.38, tags=["core_flow", "recirc_flow_a", "recirc_flow_b"], lo=0, hi=150, unit="Mlb/h",
              legend="CORE FLOW / LOOP FLOW")
     lamp(v, "JetPumpHi", -2.42, 1.55, "amber", tag="jet_pump_mismatch", label="Jet pump flow mismatch")
+    lamp(v, "RecircRunback", -2.42, 1.48, "amber", tag="runback", label="Recirculation runback limiter in (feed pump trip)")
     nameplate(v, "RECIRC PUMP A", -3.0, 1.05, size=0.010)
     nameplate(v, "RECIRC PUMP B", -2.55, 1.05, size=0.010)
     control_switch(b, "RecircPumpA", -3.05, 0.12, role="recirc_pump_a", label="Recirculation pump A: start / stop",
@@ -108,9 +153,15 @@ def build_p603(parent):
     control_switch(b, "RecircPumpB", -2.45, 0.12, role="recirc_pump_b", label="Recirculation pump B: start / stop",
                    positions=["STOP", "", "START"], tag="recirc_b_run", light_tags=("recirc_b_run", "recirc_b_stopped"))
     ma_station(b, "RecircSpeed", -2.75, 0.02, tag="recirc_demand", setpoint_tag="recirc_demand", lo=0, hi=100, unit="%",
-               legend="RECIRC MG SET SPEED", role_up="recirc_raise", role_down="recirc_lower", role_auto="recirc_auto",
+               legend="RECIRC MG SET SPEED", role_up="recirc_raise", role_down="recirc_lower",
                label="Recirculation flow control: pump speed demand")
     nameplate(b, "RECIRC FLOW CONTROL", -2.75, -0.25, size=0.010)
+    for i, pump in enumerate("AB"):
+        square_button(b, f"RecircMG{pump}_Run", -3.30 + i * 0.07, -0.16, "red", role=f"recirc_pump_{pump.lower()}",
+                      label=f"Recirc MG set {pump}: running (press to stop)", lamp_tag=f"recirc_{pump.lower()}_run")
+        square_button(b, f"RecircMG{pump}_Stop", -3.30 + i * 0.07, -0.23, "green", role=f"recirc_pump_{pump.lower()}",
+                      label=f"Recirc MG set {pump}: stopped (press to start)", lamp_tag=f"recirc_{pump.lower()}_stopped")
+    nameplate(b, "MG SET  A   B", -3.27, -0.30, size=0.007)
 
     # --- Feedwater and level
     nameplate(v, "FEEDWATER / REACTOR LEVEL", -1.75, 2.12, size=0.016)
@@ -135,15 +186,20 @@ def build_p603(parent):
     thumbwheel(b, "LevelSetpoint", -2.15, 0.20, tag="level_setpoint", digits=3, legend="LEVEL SETPOINT (in)",
                role_up="level_sp_raise", role_down="level_sp_lower", label="Reactor water level set point")
     ma_station(b, "LevelControl", -1.95, 0.0, tag="feed_demand", setpoint_tag="level_setpoint", lo=0, hi=120, unit="%",
-               legend="FW LEVEL CONTROL", role_up="feed_raise", role_down="feed_lower", role_auto="feed_auto",
+               legend="FW LEVEL CONTROL", role_up="feed_raise", role_down="feed_lower",
                label="Feedwater level control station (3-element)")
-    control_switch(b, "ElementSel", -1.75, 0.18, role="info", label="Level control: 3-element / 1-element selector",
-                   positions=["1 ELEM", "", "3 ELEM"], tag="three_element", lights=(), spring=False, radius=0.022)
     for i, pump in enumerate("ABC"):
-        control_switch(b, f"FeedPump{pump}", -1.70 + i * 0.16, -0.14, role=f"feed_pump_{pump.lower()}",
-                       label=f"Reactor feed pump {pump}: trip / reset", positions=["TRIP", "", "RUN"], tag="feed_run",
-                       light_tags=("feed_run", "feed_stopped"), radius=0.022)
+        p_ = pump.lower()
+        control_switch(b, f"FeedPump{pump}", -1.70 + i * 0.16, -0.14, role=f"feed_pump_{p_}",
+                       label=f"Reactor feed pump {pump}: trip / reset", positions=["TRIP", "", "RUN"], tag=f"feed_{p_}_run",
+                       light_tags=(f"feed_{p_}_run", f"feed_{p_}_stopped"), radius=0.022)
     nameplate(b, "REACTOR FEED PUMPS  A   B   C", -1.54, -0.30, size=0.009)
+    for i, pump in enumerate("ABC"):
+        square_button(b, f"FeedPump{pump}_Run", -1.24 + i * 0.07, -0.10, "red", role=f"feed_pump_{pump.lower()}",
+                      label=f"Reactor feed pump {pump}: running (press to trip)", lamp_tag=f"feed_{pump.lower()}_run")
+        square_button(b, f"FeedPump{pump}_Stop", -1.24 + i * 0.07, -0.16, "green", role=f"feed_pump_{pump.lower()}",
+                      label=f"Reactor feed pump {pump}: stopped (press to start)", lamp_tag=f"feed_{pump.lower()}_stopped")
+    nameplate(b, "RFP  A    B    C", -1.17, -0.23, size=0.007)
 
     # --- Neutron monitoring (centre): full core display over the APRM meters
     nameplate(v, "NEUTRON MONITORING", 0.0, 2.12, size=0.016)
@@ -158,13 +214,13 @@ def build_p603(parent):
     nameplate(b, "ROD SELECT", -0.62, -0.25, size=0.010)
     digital(b, "RodSelected", -0.26, 0.25, w=0.10, h=0.04, tag="rod_selected", digits=4, legend="SELECTED ROD")
     digital(b, "RodPosition", -0.12, 0.25, w=0.10, h=0.04, tag="rod_notch", digits=2, legend="ROD POSITION")
+    keypad_display(b, "RWM", 0.62, 0.22, tag="rod_notch", digits=4, legend="ROD WORTH MINIMIZER",
+                   label="Rod worth minimizer display (rod position)")
     nameplate(b, "ROD MOVEMENT CONTROL", -0.12, 0.16, size=0.009)
     pushbutton(b, "RodInsert", -0.26, 0.05, "black", role="rod_in", label="Rod in (hold)")
     pushbutton(b, "RodNotchOut", -0.12, 0.05, "black", role="rod_notch_out", label="Rod out notch")
     pushbutton(b, "RodContOut", 0.02, 0.05, "black", role="rod_out", label="Continuous rod out (hold)")
     nameplate(b, "IN       NOTCH OUT      CONT OUT", -0.12, -0.02, size=0.007)
-    control_switch(b, "NotchOverride", -0.12, -0.16, role="info", label="Rod out notch override switch",
-                   positions=["", "NORMAL", "OVERRIDE"], tag="", lights=(), radius=0.022)
     lamp(b, "RodOutPermit", 0.12, 0.25, "green", tag="rod_out_permit", label="Rod out permissive")
     lamp(b, "RodBlock", 0.12, 0.20, "amber", tag="rod_block", label="Rod block")
     lamp(b, "RodDrift", 0.12, 0.15, "amber", tag="rod_drift", label="Rod drift")
@@ -172,7 +228,6 @@ def build_p603(parent):
     keyswitch(b, "ModeSwitch", 0.38, 0.12, role="mode_switch", label="Reactor mode switch (SHUTDOWN / REFUEL / STARTUP / RUN)",
               positions=["SHUTDOWN", "REFUEL", "STARTUP", "RUN"], tag="mode")
     nameplate(b, "REACTOR MODE SWITCH", 0.38, -0.02, size=0.009)
-    nameplate(b, "SHUTDOWN  REFUEL  STARTUP  RUN", 0.38, 0.22, size=0.007)
     pushbutton(b, "ScramA", 0.72, -0.08, "red", role="scram", label="Manual SCRAM, channel A", radius=0.022,
                collar="collar_yellow", mushroom=True)
     pushbutton(b, "ScramB", 0.86, -0.08, "red", role="scram", label="Manual SCRAM, channel B", radius=0.022,
@@ -195,15 +250,6 @@ def build_p603(parent):
     meter(v, "Period", 2.30, 1.92, w=0.09, h=0.19, tag="period", lo=-100, hi=100, unit="s", legend="RX PERIOD", kind="round")
     recorder(v, "RecAPRM", 1.45, 1.38, tags=["aprm", "core_flow"], lo=0, hi=125, unit="%", legend="APRM / CORE FLOW")
     recorder(v, "RecIRM", 1.95, 1.38, tags=["irm", "srm"], lo=0, hi=125, unit="%", legend="IRM / SRM")
-    nameplate(b, "IRM RANGE  A  B  C  D  E  F  G  H", 1.45, 0.26, size=0.008)
-    for i, ch in enumerate("ABCDEFGH"):
-        control_switch(b, f"IRMRange_{ch}", 1.22 + i * 0.075, 0.12, role="info", label=f"IRM {ch} range switch (1-10)",
-                       positions=["1", "5", "10"], tag="irm_range", lights=(), spring=False, radius=0.018)
-    control_switch(b, "IRMBypass", 1.35, -0.12, role="info", label="IRM bypass joystick", positions=["A", "", "H"],
-                   tag="", lights=(), spring=False, radius=0.024)
-    control_switch(b, "APRMBypass", 1.70, -0.12, role="info", label="APRM bypass joystick", positions=["A", "", "F"],
-                   tag="", lights=(), spring=False, radius=0.024)
-    nameplate(b, "IRM BYPASS     APRM BYPASS", 1.52, -0.27, size=0.008)
 
     # --- RPS and rod control status (far right)
     nameplate(v, "REACTOR PROTECTION", 2.95, 2.12, size=0.016)
@@ -233,15 +279,13 @@ def build_p603(parent):
     control_switch(b, "RPSReset", 2.60, 0.10, role="scram_reset", label="RPS trip reset (both channels)",
                    positions=["", "NORMAL", "RESET"], tag="", lights=(), radius=0.022)
     nameplate(b, "RPS RESET", 2.60, -0.06, size=0.008)
-    control_switch(b, "Historian", 2.85, -0.18, role="info", label="Sequence of events recorder: run / hold",
-                   positions=["HOLD", "", "RUN"], tag="", lights=(), spring=False, radius=0.018)
     return fr
 
 
 # ----------------------------------------------------------------------------- P601 core cooling
 def build_p601(parent):
-    fr = benchboard(parent, "P601", (-5.16, -0.06, 0.0), math.pi, 5.0, ann=ANN_P601, ann_rows=3, ann_cols=8,
-                    title="P601  CORE COOLING SYSTEMS")
+    fr = benchboard(parent, "P601", (-5.16, -0.06, 0.0), math.pi, 5.0, ann=ANN_P601,
+                    title="P601  CORE COOLING SYSTEMS", front=[("321  322", -1.6), ("323  324", 1.0)], pockets=[-0.4, 2.0])
     v, b = fr["vert"], fr["bench"]
     nameplate(v, "HPCI", -2.05, 2.12, size=0.016)
     meter(v, "HPCIFlow", -2.25, 1.90, w=0.09, h=0.20, tag="hpci_flow", lo=0, hi=6000, unit="gpm", legend="HPCI FLOW")
@@ -288,8 +332,6 @@ def build_p601(parent):
     nameplate(b, "HPCI", -2.10, 0.30, size=0.011)
     control_switch(b, "HPCI", -2.25, 0.12, role="hpci", label="HPCI: start / stop", positions=["STOP", "", "START"],
                    tag="hpci_run", light_tags=("hpci_run", "hpci_stopped"))
-    control_switch(b, "HPCIInj", -2.05, 0.12, role="info", label="HPCI injection valve", positions=["CLOSE", "", "OPEN"],
-                   tag="hpci_run", light_tags=("hpci_run", "hpci_stopped"), radius=0.022)
     control_switch(b, "HPCIAvail", -2.15, -0.16, role="hpci_avail", label="HPCI: in service / out of service (instructor)",
                    positions=["OOS", "", "SERVICE"], tag="hpci_avail", lights=("white",), light_tags=("hpci_avail",),
                    spring=False, radius=0.018)
@@ -308,8 +350,9 @@ def build_p601(parent):
     for i, loop in enumerate("ABCD"):
         control_switch(b, f"RHRPump{loop}", -0.65 + i * 0.2, 0.12, role="lpci", label=f"RHR pump {loop} (LPCI): start / stop",
                        positions=["STOP", "", "START"], tag="lpci_run", light_tags=("lpci_run", "lpci_stopped"))
-    control_switch(b, "RHRMode", -0.35, -0.16, role="info", label="RHR mode: LPCI / suppression pool cooling / shutdown cooling",
-                   positions=["SP COOL", "LPCI", "SDC"], tag="", lights=(), spring=False, radius=0.022)
+    # RHR and core spray injection valves: square red (open) / green (closed) pushbuttons in a row
+    keypad_display(b, "ECCSFlow", 0.80, -0.20, tag="eccs_flow", digits=5, legend="TOTAL ECCS FLOW GPM",
+                   label="ECCS flow digital display")
     nameplate(b, "ADS", 0.35, 0.30, size=0.011)
     keyswitch(b, "ADSInhibit", 0.35, 0.12, role="ads_inhibit", label="ADS inhibit keylock switch",
               positions=["NORMAL", "INHIBIT"], tag="ads_inhibit")
@@ -330,9 +373,10 @@ def build_p601(parent):
 
 # ----------------------------------------------------------------------------- P653 turbine generator
 def build_p653(parent):
-    fr = benchboard(parent, "P653", (5.16, -0.06, 0.0), 0.0, 5.0, ann=ANN_P653, ann_rows=3, ann_cols=8,
-                    title="P653  TURBINE GENERATOR")
+    fr = benchboard(parent, "P653", (5.16, -0.06, 0.0), 0.0, 5.0, ann=ANN_P653,
+                    title="P653  TURBINE GENERATOR", front=[("302  303", -1.6), ("305  306", 1.0)], pockets=[-0.4, 2.0])
     v, b = fr["vert"], fr["bench"]
+    flat_screen(v, "TurbineScreen", 2.05, 1.30, w=0.40, h=0.28, tag="gen_mw", legend="TURBINE SUPERVISORY")
     nameplate(v, "MAIN STEAM", -1.90, 2.12, size=0.016)
     for i, line in enumerate("ABCD"):
         meter(v, f"MSLFlow{line}", -2.30 + i * 0.12, 1.90, w=0.09, h=0.20, tag="msl_flow", lo=0, hi=5, unit="Mlb/h",
@@ -373,9 +417,9 @@ def build_p653(parent):
     recorder(v, "RecGen", 0.40, 1.20, tags=["gen_mw", "gen_hz"], lo=0, hi=1200, unit="MWe", legend="MW / FREQUENCY")
     nameplate(v, "FEED PUMP TURBINES", 1.75, 2.12, size=0.016)
     for i, pump in enumerate("ABC"):
-        meter(v, f"RFPT{pump}Speed", 1.45 + i * 0.15, 1.90, w=0.09, h=0.22, tag="rfpt_speed", lo=0, hi=6000, unit="rpm",
+        meter(v, f"RFPT{pump}Speed", 1.45 + i * 0.15, 1.90, w=0.09, h=0.22, tag=f"rfpt_speed_{pump.lower()}", lo=0, hi=6000, unit="rpm",
               legend=f"RFPT {pump} SPEED")
-        meter(v, f"RFP{pump}Flow", 1.45 + i * 0.15, 1.55, w=0.09, h=0.22, tag="rfp_flow", lo=0, hi=10, unit="Mlb/h",
+        meter(v, f"RFP{pump}Flow", 1.45 + i * 0.15, 1.55, w=0.09, h=0.22, tag=f"rfp_flow_{pump.lower()}", lo=0, hi=10, unit="Mlb/h",
               legend=f"FEED PUMP {pump} FLOW")
     meter(v, "CondLevel", 2.05, 1.90, w=0.09, h=0.22, tag="hotwell_level", lo=0, hi=60, unit="in", legend="HOTWELL LEVEL")
     meter(v, "CondPumpDP", 2.20, 1.90, w=0.09, h=0.22, tag="cond_pump", lo=0, hi=600, unit="psig", legend="COND PUMP DISCH")
@@ -389,27 +433,21 @@ def build_p653(parent):
     nameplate(b, "RESET", -1.70, -0.08, size=0.008)
     nameplate(b, "EHC PRESSURE REGULATOR", -1.20, 0.32, size=0.010)
     ma_station(b, "PressReg", -1.30, 0.02, tag="pressure", setpoint_tag="pressure_setpoint", lo=900, hi=1100, unit="psig",
-               legend="PRESS SETPOINT", role_up="press_sp_raise", role_down="press_sp_lower", role_auto="info",
+               legend="PRESS SETPOINT", role_up="press_sp_raise", role_down="press_sp_lower",
                label="EHC pressure regulator set point (psig)")
     control_switch(b, "BypassJack", -1.05, 0.10, role="bypass_avail", label="Bypass valves: in service / out of service",
                    positions=["OOS", "", "SERVICE"], tag="bypass_avail", lights=("white",), light_tags=("bypass_avail",),
                    spring=False, radius=0.022)
     nameplate(b, "BYPASS VALVES", -1.05, -0.08, size=0.008)
-    control_switch(b, "LoadSel", -0.80, 0.10, role="info", label="Load set: raise / lower (EHC)",
-                   positions=["LOWER", "", "RAISE"], tag="", lights=(), radius=0.022)
-    nameplate(b, "LOAD SET", -0.80, -0.08, size=0.008)
     nameplate(b, "GENERATOR", 0.30, 0.30, size=0.011)
     control_switch(b, "GenBreaker", 0.15, 0.10, role="gen_breaker", label="Generator output breaker: close / trip",
                    positions=["TRIP", "", "CLOSE"], tag="gen_breaker", light_tags=("gen_breaker", "gen_breaker_open"))
-    control_switch(b, "GenField", 0.45, 0.10, role="info", label="Generator field breaker", positions=["TRIP", "", "CLOSE"],
-                   tag="gen_breaker", light_tags=("gen_breaker", "gen_breaker_open"))
-    control_switch(b, "Sync", 0.75, 0.10, role="info", label="Synchroscope switch", positions=["OFF", "", "ON"],
-                   tag="", lights=(), spring=False, radius=0.022)
-    nameplate(b, "OUTPUT BKR    FIELD BKR    SYNCHROSCOPE", 0.45, -0.08, size=0.007)
+    nameplate(b, "OUTPUT BREAKER", 0.15, -0.08, size=0.007)
     nameplate(b, "REACTOR FEED PUMP TURBINES  A   B   C", 1.60, 0.30, size=0.010)
     for i, pump in enumerate("ABC"):
         control_switch(b, f"RFPT{pump}", 1.35 + i * 0.22, 0.10, role=f"feed_pump_{pump.lower()}", label=f"Feed pump turbine {pump}: start / trip",
-                       positions=["TRIP", "", "START"], tag="feed_run", light_tags=("feed_run", "feed_stopped"))
+                       positions=["TRIP", "", "START"], tag=f"feed_{pump.lower()}_run",
+                       light_tags=(f"feed_{pump.lower()}_run", f"feed_{pump.lower()}_stopped"))
     control_switch(b, "Condenser", 2.15, 0.10, role="condenser_avail", label="Main condenser: available / lost (instructor)",
                    positions=["LOST", "", "AVAIL"], tag="condenser_avail", lights=("white",), light_tags=("condenser_avail",),
                    spring=False, radius=0.022)
@@ -419,9 +457,231 @@ def build_p653(parent):
     return fr
 
 
-def build_corner(parent, name, origin, yaw, title, items):
+# ----------------------------------------------------------------------------- auxiliary benchboards
+# Balance-of-plant and auxiliary systems on benchboards along the side walls, outside the
+# horseshoe: the reactor auxiliaries (CRD, cleanup, service water and air, secondary
+# containment and radiation monitors) on the west wall behind the core cooling board, the
+# condensate and feedwater heaters, circulating water and offgas and the emergency diesels on the
+# east wall behind the turbine board. Their switches run the equipment in reactorsim/app/bwr_aux.py.
+
+ANN_AUX = {
+    "P604": [("331 CRD/RWCU", ["crd_pump_trip", "crd_accum", "rod_block", "rwcu_isolated", "conductivity_high", "level_l2"])],
+    "P606": [("333 SW/AIR", ["torus_cooling", "torus_temp", "lpci_unavail", "air_low", "scram_air_low", "msiv_closure"])],
+    "P605": [("334 SEC CONT", ["rb_isolated", "sgts_run", "rb_dp_low", "drywell_press", "level_l2"]),
+             ("320 RAD MON", ["rad_high", "offgas_rad_high", "fuel_damage"])],
+    "P650": [("335 COND/FW HTR", ["cond_pump_trip", "cond_o2_high", "fw_heater_out", "feed_trip", "vacuum_low"])],
+    "P651": [("336 CIRC WTR/OG", ["vacuum_low", "circ_pump_trip", "sjae_trouble", "offgas_rad_high", "condenser_low", "turbine_trip"])],
+    "P654": [("337 DIESEL GEN", ["loop", "diesel_run", "diesel_fail", "dc_low", "station_blackout", "diesel_start"])],
+}
+AUX_W = 3.6
+
+
+def _meter_row(v, prefix, items, r0, z, dr=0.15):
+    """A row of edgewise meters: (tag, lo, hi, unit, legend[, extra kwargs])."""
+    for i, it in enumerate(items):
+        tag, lo, hi, unit, legend = it[:5]
+        meter(v, f"{prefix}_{tag}", r0 + i * dr, z, w=0.09, h=0.22, tag=tag, lo=lo, hi=hi, unit=unit, legend=legend,
+              **(it[5] if len(it) > 5 else {}))
+
+
+def _equipment(b, v, prefix, equip, units, r0, dr, title, noun, positions=("STOP", "", "START"), amps_hi=None, amps_legend=None):
+    """A row of spring-return control switches with their red/green lights on the bench and,
+    when the equipment has a motor, an ammeter over each switch on the vertical section."""
+    nameplate(b, title, r0 + dr * (len(units) - 1) / 2, 0.30, size=0.010)
+    for i, u in enumerate(units):
+        key = f"{equip}_{u.lower()}"
+        control_switch(b, f"{prefix}_{equip}_{u}", r0 + i * dr, 0.10, role=f"aux:{equip}:{u.lower()}",
+                       label=f"{noun} {u}: {positions[0].lower()} / {positions[2].lower()}", positions=list(positions),
+                       tag=f"{key}_run", light_tags=(f"{key}_run", f"{key}_stopped"), radius=0.026)
+        if amps_hi:
+            meter(v, f"{prefix}_{key}_amps", r0 + i * dr, 1.18, tag=f"{key}_amps", lo=0, hi=amps_hi, unit="A",
+                  legend=f"{amps_legend or noun.upper()} {u}")
+
+
+def _aux_board(parent, name, origin, yaw, title, front):
+    return benchboard(parent, name, origin, yaw, AUX_W, ann=ANN_AUX[name], title=title, front=front, pockets=[0.0])
+
+
+def build_p604(parent):
+    fr = _aux_board(parent, "P604", (-9.4, 4.0, 0.0), math.pi, "P604  CRD HYDRAULICS / REACTOR WATER CLEANUP", [("331", -1.2), ("332", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CONTROL ROD DRIVE HYDRAULICS", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P604", [("crd_charging", 0, 2000, "psig", "CHARGING WTR PRESS", {"red": 940}),
+                           ("crd_drive_dp", 0, 400, "psid", "DRIVE WATER dP"),
+                           ("crd_flow", 0, 100, "gpm", "CRD SYSTEM FLOW"),
+                           ("pressure", 0, 1500, "psig", "RX PRESSURE")], -1.45, 1.86)
+    recorder(v, "P604_RecCRD", -0.95, 1.50, tags=["crd_charging", "pressure"], lo=0, hi=2000, unit="psig",
+             legend="CHARGING HEADER / RX PRESSURE")
+    _equipment(b, v, "P604", "crd_pump", "AB", -1.30, 0.30, "CRD PUMPS  A   B", "CRD pump", amps_hi=60, amps_legend="CRD PUMP")
+    lamp(b, "P604_RodBlock", -0.55, 0.20, "amber", tag="rod_block", label="Rod block")
+    lamp(b, "P604_Accum", -0.55, 0.12, "amber", tag="crd_accum", label="CRD accumulator / charging pressure low")
+    nameplate(v, "REACTOR WATER CLEANUP", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P604", [("rwcu_flow", 0, 500, "gpm", "RWCU FLOW"),
+                           ("conductivity", 0, 0.5, "uS/cm", "RX WATER CONDUCTIVITY", {"red": 0.3}),
+                           ("rwcu_inlet_temp", 0, 600, "F", "RWCU INLET TEMP")], 0.55, 1.86)
+    recorder(v, "P604_RecCond", 1.10, 1.50, tags=["conductivity"], lo=0, hi=0.5, unit="uS/cm", legend="REACTOR WATER CONDUCTIVITY")
+    lamp(v, "P604_RWCUIsol", 0.55, 1.55, "amber", tag="rwcu_isolated", radius=0.014, label="RWCU isolated")
+    nameplate(v, "RWCU ISOL", 0.55, 1.48, size=0.007)
+    _equipment(b, v, "P604", "rwcu_pump", "AB", 0.70, 0.30, "RWCU PUMPS  A   B", "RWCU pump", amps_hi=150, amps_legend="RWCU PUMP")
+    return fr
+
+
+def build_p606(parent):
+    fr = _aux_board(parent, "P606", (-9.4, 0.0, 0.0), math.pi, "P606  SERVICE WATER / TORUS COOLING / INSTRUMENT AIR",
+                    [("333", -1.2), ("333", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "HIGH PRESSURE SERVICE WATER / RHR TORUS COOLING", -0.85, 2.06, size=0.012)
+    _meter_row(v, "P606", [("hpsw_flow", 0, 20000, "gpm", "HPSW FLOW"),
+                           ("rhr_hx", 0, 25000, "gpm", "RHR HX FLOW"),
+                           ("rhr_hx_out", 0, 250, "F", "RHR HX OUTLET TEMP"),
+                           ("torus_temp", 0, 250, "F", "TORUS WATER TEMP")], -1.40, 1.86)
+    recorder(v, "P606_RecTorus", -0.55, 1.50, tags=["torus_temp", "rhr_hx_out"], lo=0, hi=250, unit="F",
+             legend="TORUS TEMP / RHR HX OUTLET")
+    _equipment(b, v, "P606", "hpsw_pump", "ABCD", -1.62, 0.17, "HPSW PUMPS  A  B  C  D", "HPSW pump", amps_hi=200, amps_legend="HPSW PUMP")
+    _equipment(b, v, "P606", "torus_cool", "AB", -0.78, 0.24, "RHR TORUS COOLING  A   B", "RHR torus cooling loop",
+               positions=("OFF", "", "ON"))
+    nameplate(v, "INSTRUMENT AIR", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P606", [("air_header", 0, 120, "psig", "INST AIR HEADER", {"red": 60}),
+                           ("pressure", 0, 1500, "psig", "RX PRESSURE")], 0.60, 1.86)
+    lamp(v, "P606_AirLow", 1.05, 1.92, "amber", tag="air_low", radius=0.013, label="Instrument air pressure low")
+    lamp(v, "P606_ScramAir", 1.05, 1.84, "red", tag="scram_air_low", radius=0.013, label="Scram air header pressure low")
+    nameplate(v, "AIR LOW / SCRAM AIR", 1.05, 1.77, size=0.007)
+    recorder(v, "P606_RecAir", 1.25, 1.50, tags=["air_header"], lo=0, hi=120, unit="psig", legend="INSTRUMENT AIR HEADER")
+    _equipment(b, v, "P606", "air_comp", "ABC", 0.55, 0.22, "AIR COMPRESSORS  A   B   C", "Instrument air compressor",
+               amps_hi=150, amps_legend="AIR COMP")
+    return fr
+
+
+def build_p605(parent):
+    fr = _aux_board(parent, "P605", (-9.4, -4.0, 0.0), math.pi, "P605  SECONDARY CONTAINMENT / RADIATION MONITORING",
+                    [("334", -1.2), ("320", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "REACTOR BUILDING HVAC / STANDBY GAS TREATMENT", -0.90, 2.06, size=0.012)
+    _meter_row(v, "P605", [("rb_dp", -1.0, 0.5, "in wg", "RX BLDG dP"),
+                           ("sgts_flow", 0, 15000, "cfm", "SGTS FLOW"),
+                           ("drywell_pressure", -5, 80, "psig", "DRYWELL PRESSURE")], -1.40, 1.86)
+    lamp(v, "P605_RBIsol", -0.85, 1.92, "amber", tag="rb_isolated", radius=0.014, label="Reactor building isolated")
+    lamp(v, "P605_SGTS", -0.70, 1.92, "red", tag="sgts_run", radius=0.014, label="Standby gas treatment running")
+    nameplate(v, "RB ISOL   SGTS RUN", -0.78, 1.84, size=0.007)
+    recorder(v, "P605_RecRB", -1.10, 1.50, tags=["rb_dp"], lo=-1.0, hi=0.5, unit="in wg", legend="REACTOR BUILDING dP")
+    _equipment(b, v, "P605", "rb_hvac", "A", -1.45, 0.2, "RB VENT", "Reactor building ventilation", positions=("ISOL", "", "RUN"))
+    _equipment(b, v, "P605", "sgts", "AB", -1.05, 0.25, "SGTS  A   B", "Standby gas treatment train")
+    nameplate(v, "PROCESS AND AREA RADIATION MONITORS", 0.90, 2.06, size=0.012)
+    _meter_row(v, "P605", [("rb_vent_log", -2, 4, "mR/h", "RB VENT EXHAUST", {"log": 1, "red": 1.2}),
+                           ("refuel_log", -2, 4, "mR/h", "REFUEL FLOOR", {"log": 1}),
+                           ("stack_log", -2, 4, "mR/h", "MAIN STACK", {"log": 1, "red": 0.7}),
+                           ("offgas_log", -2, 4, "mR/h", "OFFGAS PRETREAT", {"log": 1, "red": 3.0}),
+                           ("cr_vent_log", -2, 4, "mR/h", "CONTROL RM VENT", {"log": 1}),
+                           ("msl_rad", 0, 10, "mR/h", "MAIN STEAM LINE")], 0.25, 1.86, dr=0.14)
+    recorder(v, "P605_RecRad", 0.95, 1.50, tags=["rb_vent_log", "stack_log", "offgas_log"], lo=-2, hi=4, unit="log mR/h",
+             legend="RB VENT / STACK / OFFGAS RAD")
+    lamp(b, "P605_RadHigh", 0.60, 0.15, "red", tag="rad_high", radius=0.014, label="Radiation high (RB vent or stack)")
+    nameplate(b, "RAD HIGH", 0.60, 0.07, size=0.008)
+    return fr
+
+
+def build_p650(parent):
+    fr = _aux_board(parent, "P650", (9.4, 4.0, 0.0), 0.0, "P650  CONDENSATE / FEEDWATER HEATERS", [("335", -1.2), ("335", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CONDENSATE / HOTWELL DEAERATION", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P650", [("cond_header", 0, 600, "psig", "COND HEADER PRESS"),
+                           ("hotwell_level", 0, 60, "in", "HOTWELL LEVEL"),
+                           ("hotwell_temp", 0, 200, "F", "HOTWELL TEMP"),
+                           ("vacuum", 0, 30, "in Hg", "CONDENSER VACUUM"),
+                           ("cond_o2", 0, 500, "ppb", "COND DISSOLVED O2", {"red": 100})], -1.60, 1.86)
+    recorder(v, "P650_RecO2", -0.95, 1.50, tags=["cond_o2"], lo=0, hi=500, unit="ppb", legend="CONDENSATE DISSOLVED OXYGEN")
+    _equipment(b, v, "P650", "cond_pump", "ABC", -1.45, 0.22, "CONDENSATE PUMPS  A   B   C", "Condensate pump",
+               amps_hi=500, amps_legend="COND PUMP")
+    nameplate(v, "FEEDWATER HEATERS (5 STAGES, 3 STRINGS)", 0.95, 2.06, size=0.012)
+    _meter_row(v, "P650", [("fw_string_a", 0, 500, "F", "HTR STRING A OUT"),
+                           ("fw_string_b", 0, 500, "F", "HTR STRING B OUT"),
+                           ("fw_string_c", 0, 500, "F", "HTR STRING C OUT"),
+                           ("feed_temp", 0, 500, "F", "FINAL FW TEMP"),
+                           ("feed_flow", 0, 20, "Mlb/h", "FEED FLOW")], 0.35, 1.86)
+    recorder(v, "P650_RecFW", 0.95, 1.50, tags=["feed_temp", "fw_string_a", "hotwell_temp"], lo=0, hi=500, unit="F",
+             legend="FINAL FW / STRING A / HOTWELL TEMP")
+    _equipment(b, v, "P650", "heater", "ABC", 0.65, 0.25, "HEATER STRINGS  A   B   C", "Feedwater heater string",
+               positions=("OUT", "", "IN"))
+    return fr
+
+
+def build_p651(parent):
+    fr = _aux_board(parent, "P651", (9.4, 0.0, 0.0), 0.0, "P651  CIRC WATER / AIR EJECTORS / OFFGAS", [("336", -1.2), ("336", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    nameplate(v, "CIRCULATING WATER", -0.95, 2.06, size=0.013)
+    _meter_row(v, "P651", [("circ_in_temp", 0, 150, "F", "CIRC WTR INLET"),
+                           ("circ_out_temp", 0, 150, "F", "CIRC WTR OUTLET"),
+                           ("circ_flow", 0, 600, "kgpm", "CIRC WATER FLOW"),
+                           ("vacuum", 0, 30, "in Hg", "CONDENSER VACUUM", {"red": 22.5}),
+                           ("hotwell_temp", 0, 200, "F", "HOTWELL TEMP")], -1.60, 1.86)
+    recorder(v, "P651_RecVac", -0.95, 1.50, tags=["vacuum"], lo=0, hi=30, unit="in Hg", legend="CONDENSER VACUUM")
+    _equipment(b, v, "P651", "circ_pump", "ABC", -1.45, 0.22, "CIRC WATER PUMPS  A   B   C", "Circulating water pump",
+               amps_hi=600, amps_legend="CIRC PUMP")
+    nameplate(v, "STEAM JET AIR EJECTORS / OFFGAS", 0.95, 2.06, size=0.013)
+    _meter_row(v, "P651", [("sjae_steam", 0, 200, "psig", "SJAE STEAM PRESS"),
+                           ("offgas_flow", 0, 50, "scfm", "OFFGAS FLOW"),
+                           ("offgas_h2", 0, 4, "%", "RECOMB OUTLET H2"),
+                           ("offgas_log", -2, 4, "mR/h", "OFFGAS PRETREAT RAD", {"log": 1, "red": 3.0})], 0.45, 1.86)
+    recorder(v, "P651_RecOG", 0.95, 1.50, tags=["offgas_flow"], lo=0, hi=50, unit="scfm", legend="OFFGAS FLOW")
+    _equipment(b, v, "P651", "sjae", "AB", 0.70, 0.30, "AIR EJECTORS  A   B", "Steam jet air ejector", positions=("OFF", "", "ON"))
+    return fr
+
+
+def build_p654(parent):
+    fr = _aux_board(parent, "P654", (9.4, -4.0, 0.0), 0.0, "P654  EMERGENCY DIESEL GENERATORS", [("337", -1.2), ("337", 1.2)])
+    v, b = fr["vert"], fr["bench"]
+    meter(v, "P654_Grid", -1.70, 1.86, w=0.09, h=0.22, tag="grid_kv", lo=0, hi=600, unit="kV", legend="OFFSITE 500 kV")
+    lamp(v, "P654_Offsite", -1.70, 1.55, "white", tag="offsite_power", radius=0.014, label="Offsite power available")
+    nameplate(v, "OFFSITE", -1.70, 1.48, size=0.007)
+    meter(v, "P654_DC", 1.70, 1.86, w=0.09, h=0.22, tag="dc_bus", lo=0, hi=150, unit="V", legend="125 V DC BATTERY", red=105)
+    for i in range(4):
+        r = -1.20 + i * 0.80
+        nameplate(v, f"DIESEL GEN E{i + 1}   BUS E{i + 1}2", r, 2.06, size=0.011)
+        meter(v, f"P654_DG{i + 1}_kW", r - 0.07, 1.86, w=0.09, h=0.22, tag=f"diesel_kw_{i + 1}", lo=0, hi=4000, unit="kW",
+              legend=f"E{i + 1} DG LOAD")
+        meter(v, f"P654_E{i + 1}2_kV", r + 0.07, 1.86, w=0.09, h=0.22, tag=f"e_bus_{i + 1}", lo=0, hi=5, unit="kV",
+              legend=f"E{i + 1}2 BUS VOLTS")
+        lamp(v, f"P654_DG{i + 1}_Bkr", r - 0.05, 1.55, "red", tag=f"diesel_{i + 1}_run", radius=0.013,
+             label=f"Diesel generator E{i + 1} output breaker closed")
+        lamp(v, f"P654_DG{i + 1}_Open", r + 0.05, 1.55, "green", tag=f"diesel_{i + 1}_stopped", radius=0.013,
+             label=f"Diesel generator E{i + 1} stopped")
+        nameplate(v, "BKR CLOSED  OPEN", r, 1.48, size=0.007)
+        nameplate(b, f"DG E{i + 1}", r, 0.30, size=0.010)
+        control_switch(b, f"P654_diesel_{i + 1}", r, 0.10, role=f"aux:diesel:{i + 1}",
+                       label=f"Diesel generator E{i + 1}: stop / start", positions=["STOP", "", "START"],
+                       tag=f"diesel_{i + 1}_run", light_tags=(f"diesel_{i + 1}_run", f"diesel_{i + 1}_stopped"), radius=0.026)
+    pushbutton(b, "LOOP", 1.62, -0.22, "black", role="loss_of_offsite_power",
+               label="Instructor: loss of offsite power (diesels start); press again to restore", radius=0.010)
+    nameplate(b, "LOOP", 1.62, -0.30, size=0.007)
+    return fr
+
+
+def _mimics(fr):
+    """Painted mimic lines on the bench sections: a header under each row of switches with a drop
+    to every switch, coloured by the fluid (or power) it carries."""
+    name = fr["root"].name
+    rows = {
+        "P604": [([-1.30, -1.00], "water"), ([0.70, 1.00], "water")],
+        "P606": [([-1.62, -1.45, -1.28, -1.11], "sw"), ([-0.78, -0.54], "sw"), ([0.55, 0.77, 0.99], "air")],
+        "P605": [([-1.45, -1.05, -0.80], "air")],
+        "P650": [([-1.45, -1.23, -1.01], "water"), ([0.65, 0.90, 1.15], "water")],
+        "P651": [([-1.45, -1.23, -1.01], "sw"), ([0.70, 1.00], "steam")],
+        "P654": [([-1.20, -0.40, 0.40, 1.20], "power")],
+    }[name]
+    for i, (drops, kind) in enumerate(rows):
+        mimic(fr["bench"], f"{name}_{i}_Header", [(drops[0] - 0.08, -0.07), (drops[-1] + 0.08, -0.07)], kind)
+        for k, rr in enumerate(drops):
+            mimic(fr["bench"], f"{name}_{i}_{k}", [(rr, -0.07), (rr, 0.035)], kind)
+
+
+def build_aux_boards(parent):
+    for build in (build_p604, build_p606, build_p605, build_p650, build_p651, build_p654):
+        _mimics(build(parent))
+
+
+def build_corner(parent, name, origin, yaw, title, items, ann=None):
     """Angled corner panel (no bench) with a few meters and lamps."""
-    fr = benchboard(parent, name, origin, yaw, 2.2, with_bench=False, title=title)
+    fr = benchboard(parent, name, origin, yaw, 2.2, with_bench=False, title=title, ann=ann, ann_cols=8)
     v = fr["vert"]
     for i, (nm, tag, lo, hi, unit, legend) in enumerate(items):
         meter(v, nm, -0.75 + (i % 5) * 0.3, 1.85 - (i // 5) * 0.32, w=0.09, h=0.22, tag=tag, lo=lo, hi=hi, unit=unit, legend=legend)
@@ -454,6 +714,8 @@ def build_back_panels(parent):
     recorder(v, "BP_RecPress", -n * w / 2 + 8.5 * w, 1.75, tags=["pressure", "gen_mw"], lo=0, hi=1500, unit="psig", legend="PRESSURE / GEN MW")
     meter(v, "BP_Xenon", -n * w / 2 + 2.3 * w, 1.25, w=0.09, h=0.22, tag="xenon", lo=-5, hi=0, unit="$", legend="XENON")
     meter(v, "BP_Burnup", -n * w / 2 + 2.7 * w, 1.25, w=0.09, h=0.22, tag="burnup", lo=0, hi=100, unit="%", legend="CYCLE BURNUP")
+    flat_screen(v, "BP_ScreenPower", -n * w / 2 + 3.5 * w, 1.15, w=0.44, h=0.32, tag="aprm", legend="CORE MONITOR")
+    flat_screen(v, "BP_ScreenLevel", -n * w / 2 + 7.5 * w, 1.15, w=0.44, h=0.32, tag="level", legend="PLANT COMPUTER")
     for i in range(n):
         if i in (2, 3, 4, 7, 8):
             continue
@@ -479,16 +741,34 @@ def build_room(parent):
     walls.box_minmax((x0, y1, 0), (x1, y1 + t, CEILING))
     walls.box_minmax((x0, y0 - t, 0), (x1, y0, CEILING))
     walls.build("Walls", m["wall"], parent)
+    # The luminous ceiling of the photos: white perforated panels lit from above in a metal grid.
     MeshBuilder().box_minmax((x0, y0, CEILING), (x1, y1, CEILING + 0.1)).build("Ceiling", m["ceiling"], parent)
-    # Recessed 2 x 4 ft fluorescent troffers in a 2.4 m grid, the way the 2019 WITF photo shows the room.
+    grid = MeshBuilder()
+    for x in range(int(x0), int(x1) + 1):
+        grid.box((x, 0, CEILING - 0.008), (0.02, y1 - y0, 0.016))
+    for y in range(int(y0), int(y1) + 1):
+        grid.box((0, y, CEILING - 0.008), (x1 - x0, 0.02, 0.016))
+    grid.build("CeilingGrid", m["ceiling_grid"], parent)
     fix = MeshBuilder()
-    for x in range(-8, 9, 2):
-        for y in range(-6, 7, 2):
-            fix.box((x, y + 0.5, CEILING - 0.01), (0.58, 1.18, 0.02))
+    for x in range(int(x0), int(x1)):
+        for y in range(int(y0), int(y1)):
+            fix.box((x + 0.5, y + 0.5, CEILING - 0.005), (0.96, 0.96, 0.01))
     fix.build("LightFixtures", m["fixture"], parent)
-    # Doors in the south wall
+    # Red doors in grey frames in the south wall
     for x, nm in ((-7.0, "Door_West"), (7.0, "Door_East")):
-        box(nm, (x, y0 + 0.03, 1.05), (1.0, 0.06, 2.1), m["door"], parent)
+        box(f"{nm}_Frame", (x, y0 + 0.02, 1.08), (1.12, 0.05, 2.16), m["door_frame"], parent)
+        box(nm, (x, y0 + 0.05, 1.05), (1.0, 0.05, 2.1), m["door"], parent)
+        MeshBuilder().box((x + 0.35, y0 + 0.10, 1.0), (0.03, 0.05, 0.12)).build(f"{nm}_Handle", m["chrome"], parent)
+        MeshBuilder().box((x, y0 + 0.08, 1.45), (0.22, 0.01, 0.55)).build(f"{nm}_Window", m["glass"], parent)
+    # Map-style mimic desk: a low table of laminated plant drawings to spread the procedures on
+    mimic = empty("MimicDesk", (0.0, -5.6, 0.0), parent)
+    MeshBuilder().box((0, 0, 0.80), (1.3, 2.6, 0.05)).build("Mimic_Top", m["desk"], mimic, bevel=0.004)
+    MeshBuilder().box((0, -1.1, 0.39), (1.1, 0.12, 0.78)).box((0, 1.1, 0.39), (1.1, 0.12, 0.78)).build("Mimic_Legs", m["panel_dark"], mimic)
+    # sheets lie flat, read by someone standing at the horseshoe end looking south
+    sheets = face_frame("Mimic_Frame", mimic, (0, 0, 0.826), pitch=math.pi / 2, yaw=-math.pi / 2)
+    for i, (title, zz) in enumerate([("REACTOR RECIRCULATION", -0.95), ("FEEDWATER / CONDENSATE", -0.32), ("RHR / CORE SPRAY", 0.32), ("MAIN STEAM / TURBINE", 0.95)]):
+        P._face_quad(f"ui_Drawing_{i}", sheets, 0.0, zz, 1.10, 0.56, m["laminate"], stand=0.001, face="drawing", legend=title,
+                     seed=i, label=f"Laminated drawing: {title}")
     # Shift supervisor's desk facing the boards from the open end of the horseshoe
     desk = empty("SupervisorDesk", (0.0, -3.6, 0.0), parent)
     MeshBuilder().box((0, 0, 0.74), (0.9, 2.2, 0.04)).build("Desk_Top", m["desk"], desk, bevel=0.004)
@@ -511,6 +791,79 @@ def build_room(parent):
     clock = empty("ClockFrame", (0.0, y1 - 0.05, 2.75), parent)
     clock.rotation_euler = (0, 0, -math.pi / 2)
     P._face_quad("ui_WallClock", clock, 0.0, 0.0, 0.32, 0.32, m["face"], stand=0.001, face="clock", tag="time_s", label="Wall clock")
+    build_fittings(parent, m)
+
+
+def build_fittings(parent, m):
+    """The building fittings of a real control room: air supply diffusers and return grilles
+    (the air handling heard in the room sound), smoke detectors, exit signs and emergency lights
+    over the doors, fire extinguishers, the procedure bookcase and the alarm printer."""
+    x0, x1 = ROOM_X
+    y0, y1 = ROOM_Y
+    # square four-way supply diffusers in the ceiling grid, louvres as nested frames
+    diff = MeshBuilder()
+    for x, y in ((-6.5, -4.5), (0.5, -4.5), (6.5, -4.5), (-6.5, 1.5), (6.5, 1.5), (-2.5, 1.5), (2.5, 1.5), (0.5, 5.5)):
+        for k, size in enumerate((0.58, 0.44, 0.30, 0.16)):
+            t = 0.02
+            z = CEILING - 0.012 - k * 0.012
+            diff.box((x, y - size / 2, z), (size, t, 0.012))
+            diff.box((x, y + size / 2, z), (size, t, 0.012))
+            diff.box((x - size / 2, y, z), (t, size, 0.012))
+            diff.box((x + size / 2, y, z), (t, size, 0.012))
+        diff.box((x, y, CEILING - 0.006), (0.60, 0.60, 0.004))
+    diff.build("AirDiffusers", m["grille"], parent)
+    # return air grilles low on the side walls
+    ret = MeshBuilder()
+    for x, y in ((x0 + 0.01, -6.6), (x1 - 0.01, -6.6)):
+        ret.box((x, y, 0.45), (0.02, 1.2, 0.5))
+        for k in range(11):
+            ret.box((x + (0.008 if x < 0 else -0.008), y, 0.23 + k * 0.044), (0.012, 1.16, 0.012))
+    ret.build("ReturnGrilles", m["grille"], parent)
+    # smoke detectors
+    sd = MeshBuilder()
+    for x, y in ((-5.0, -2.0), (5.0, -2.0), (0.0, 0.5), (-5.0, 4.5), (5.0, 4.5), (0.0, -6.0), (-8.5, 0.0), (8.5, 0.0)):
+        sd.cylinder((x + 0.5, y + 0.5, CEILING - 0.035), 0.07, 0.03, 20)
+    sd.build("SmokeDetectors", m["paper"], parent)
+    # exit signs and twin-head emergency lights over the doors
+    for x, nm in ((-7.0, "West"), (7.0, "East")):
+        box(f"ExitSign_{nm}", (x, y0 + 0.06, 2.35), (0.36, 0.06, 0.16), m["exit_sign"], parent)
+        flat_text(f"ExitText_{nm}", "EXIT", m["lettering"], (x, y0 + 0.093, 2.32), math.pi / 2, 0.09, depth=0.004, parent=parent)
+        el = MeshBuilder()
+        el.box((x + 0.75, y0 + 0.08, 2.55), (0.36, 0.14, 0.16))
+        for dx in (-0.12, 0.12):
+            el.sphere((x + 0.75 + dx, y0 + 0.17, 2.50), 0.045, 12, 6)
+        el.build(f"EmergencyLight_{nm}", m["screen_case"], parent)
+        # extinguisher on a wall bracket beside the door
+        ex = MeshBuilder()
+        ex.cylinder((x - 0.9, y0 + 0.12, 0.55), 0.075, 0.50, 18)
+        ex.sphere((x - 0.9, y0 + 0.12, 1.05), 0.075, 14, 6, z_min=0.0)
+        ex.build(f"Extinguisher_{nm}", m["extinguisher"], parent)
+        MeshBuilder().box((x - 0.9, y0 + 0.12, 1.14), (0.05, 0.12, 0.05)).build(f"ExtinguisherHead_{nm}", m["phone"], parent)
+        box(f"ExtinguisherSign_{nm}", (x - 0.9, y0 + 0.02, 1.55), (0.22, 0.02, 0.30), m["extinguisher"], parent)
+    # procedure bookcase: emergency, abnormal and alarm response procedures in coloured binders
+    bc = empty("ProcedureBookcase", (-3.0, y0 + 0.22, 0.0), parent)
+    shell = MeshBuilder()
+    shell.box((0, 0, 0.02), (1.8, 0.40, 0.04))
+    for z in (0.62, 1.22, 1.82):
+        shell.box((0, 0, z), (1.8, 0.40, 0.025))
+    shell.box((0, -0.19, 0.95), (1.8, 0.02, 1.90))
+    for x in (-0.89, 0.89):
+        shell.box((x, 0, 0.95), (0.02, 0.40, 1.90))
+    shell.build("Bookcase_Shell", m["bookcase"], bc)
+    for row, z in enumerate((0.05, 0.64, 1.24)):
+        bnd = MeshBuilder()
+        for k in range(22):
+            if (k * 7 + row * 3) % 11 == 0:
+                continue   # a gap where a binder is out on a desk
+            bnd.box((-0.81 + k * 0.077, 0.02, z + 0.155), (0.065, 0.30, 0.31))
+        bnd.build(f"Bookcase_Binders_{row}", m["binder" if row != 1 else "nameplate"], bc)
+    nameplate(face_frame("Bookcase_Label", bc, (0, 0.21, 1.86), yaw=-math.pi / 2), "EOP / AOP / ARP", 0.0, 0.0, size=0.03)
+    # alarm printer on its stand, the paper feeding out of the back
+    pr = empty("AlarmPrinter", (3.0, y0 + 0.5, 0.0), parent)
+    MeshBuilder().box((0, 0, 0.36), (0.7, 0.5, 0.72)).build("Printer_Stand", m["panel_dark"], pr, bevel=0.004)
+    MeshBuilder().box((0, 0, 0.82), (0.6, 0.42, 0.18)).build("Printer_Body", m["printer"], pr, bevel=0.01)
+    MeshBuilder().box((0, 0.12, 0.96), (0.44, 0.02, 0.14)).box((0, 0.20, 0.55), (0.44, 0.01, 0.6)).build("Printer_Paper", m["paper"], pr)
+    MeshBuilder().box((0, 0.0, 0.28), (0.5, 0.4, 0.12)).build("Printer_PaperBox", m["paper"], pr)
 
 
 def _chair(parent, m, origin, name, facing, tall=False):
@@ -541,13 +894,14 @@ def build_control_room(parent=None):
         ("P602_DWT", "drywell_temp", 0, 350, "F", "DRYWELL TEMP"),
         ("P602_H2", "drywell_h2", 0, 10, "%", "DRYWELL H2"),
         ("P602_RHRHx", "rhr_hx", 0, 12000, "gpm", "RHR HX FLOW"),
-    ])
+    ], ann=ANN_P602)
     build_corner(root, "P652", (3.6 + c, 4.0 - c, 0.0), math.pi / 4, "P652  STATION ELECTRICAL", [
         ("P652_4kV_A", "bus_4kv", 0, 5, "kV", "4 kV BUS A"),
         ("P652_4kV_B", "bus_4kv", 0, 5, "kV", "4 kV BUS B"),
         ("P652_DG", "diesel_kw", 0, 4000, "kW", "DIESEL GEN LOAD"),
         ("P652_125V", "dc_bus", 0, 150, "V", "125 V DC BUS"),
         ("P652_Grid", "grid_kv", 0, 600, "kV", "500 kV SWITCHYARD"),
-    ])
+    ], ann=ANN_P652)
     build_back_panels(root)
+    build_aux_boards(root)
     return root

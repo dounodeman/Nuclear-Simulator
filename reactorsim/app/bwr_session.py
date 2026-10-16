@@ -14,6 +14,7 @@ import math
 import threading
 import time
 
+from reactorsim.app.bwr_aux import Auxiliaries
 from reactorsim.app.session import SPEEDS, TICK_S, CommandError, _clean
 from reactorsim.physics import steam
 from reactorsim.reactors import simulator_for
@@ -28,6 +29,9 @@ LB_H = 0.4536 / 3600.0
 GPM = 6.309e-5 * 740.0
 MLB_H = 1e6 * LB_H
 SRV_SW = ("CLOSE", "AUTO", "OPEN")
+MODES = ("SHUTDOWN", "REFUEL", "STARTUP", "RUN")
+RUNBACK_SPEED = 0.45   # recirculation runback limit on a feed pump trip with Level 4 low
+FEED_CAPACITY = (0.0, 0.34, 0.68, 1.0)   # share of design feed flow with 0 to 3 pumps running
 
 
 def f_of_c(c: float) -> float:
@@ -70,6 +74,11 @@ class BWRSession:
             self.slc_injected = 0.0
             self.rod_selected = "26-27"
             self.srv_switch = [1] * len(sim.srv_open)   # AUTO
+            self.aux = Auxiliaries()                    # balance of plant and auxiliary systems
+            self.rfp = [True, True, True]               # reactor feed pumps A, B, C running
+            self.runback = False                        # recirculation runback limiter in
+            self.mode_pos = 3 if sim.mode == "run" else 2
+            self.mode_dir = -1                          # the next detent: toward SHUTDOWN from RUN
             self.ann: dict[str, dict] = {}              # key -> {"active", "acked"}
             self.ann_test_until = 0.0
             self._prev_power = sim.power
@@ -112,8 +121,33 @@ class BWRSession:
             self._update_annunciators()
 
     def _plant_extras(self, h: float, p0: float) -> None:
-        """Things the plant model does not carry: turbine speed, SLC boron, the period meter."""
+        """Things the plant model does not carry: turbine speed, SLC boron, the period meter and
+        the auxiliary systems on the side panels (bwr_aux)."""
         sim = self.sim
+        sp = sim.design.setpoints
+        self.aux.step(sim, h, self.slc_running, {
+            "level_l2": sim.level2_latched or sim.level_in <= sp.level2_in,
+            "level_l1": sim.level1_latched,
+            "drywell_press": sim.ads_open or (any(sim.srv_open) and sim.torus_temp > 60),
+        })
+        # Feed pumps: a trip by the plant (Level 8, suction, power) takes all three.
+        if (sim.feed_tripped or not sim.feed_available) and any(self.rfp):
+            self.rfp = [False, False, False]
+        n = sum(self.rfp)
+        sim.feed_capacity = FEED_CAPACITY[n]
+        # Recirculation runback: a feed pump lost with Level 4 low runs the MG sets back so the
+        # remaining pumps can keep up; the limiter stays in until all three pumps run again.
+        if 0 < n < 3 and sim.level_in <= sp.level4_alarm_in and not self.runback:
+            self.runback = True
+            sim._event("trip", f"Recirculation runback to {RUNBACK_SPEED * 100:.0f}% speed: feed pump trip with Level 4 low")
+        if self.runback:
+            if n == 3:
+                self.runback = False
+                sim._event("operator", "Recirculation runback limiter reset")
+            else:
+                for pump in sim.pumps:
+                    if not pump.tripped and pump.demand > RUNBACK_SPEED:
+                        pump.demand = RUNBACK_SPEED
         # Turbine: holds 1800 rpm on the grid, coasts down after a trip, and the breaker opens.
         if sim.turbine_tripped or sim.msiv < 0.5:
             self.turbine_speed = max(0.0, self.turbine_speed - h * 1800.0 / 900.0)
@@ -169,7 +203,7 @@ class BWRSession:
             "msl_low": s.mode == "run" and p <= sp.msl_pressure_low_psig,
             "tsv_closure": s.tsv < 0.9,
             "msiv_closure": s.msiv < 0.9,
-            "mode_startup": s.mode != "run",
+            "mode_startup": self.mode_pos != 3,
             "exclusion": "Operating in the instability exclusion region" in alarms,
             "recirc_a_trip": s.pumps[0].tripped,
             "recirc_b_trip": s.pumps[1].tripped,
@@ -205,9 +239,12 @@ class BWRSession:
             "bypass_unavail": not s.bypass_available,
             "condenser_low": not s.condenser_available,
             "ehc_trouble": False,
-            "feed_a_trip": s.feed_tripped, "feed_b_trip": s.feed_tripped, "feed_c_trip": s.feed_tripped,
-            "station_blackout": not s.feed_available and not s.condenser_available,
-            "diesel_start": not s.feed_available and not s.condenser_available,
+            "feed_a_trip": not self.rfp[0], "feed_b_trip": not self.rfp[1], "feed_c_trip": not self.rfp[2],
+            "recirc_runback": self.runback,
+            "mode_shutdown": self.mode_pos == 0, "mode_refuel": self.mode_pos == 1,
+            "station_blackout": not self.aux.offsite and self.aux.emergency_buses() == 0,
+            "diesel_start": any(self.aux.on["diesel"]),
+            **self.aux.conditions(s),
         }
         return c
 
@@ -285,7 +322,7 @@ class BWRSession:
                     "rcic_flow": rcic_flow, "rcic_speed": 4500.0 if s.rcic.running else 0.0,
                     "cs_flow_a": cs_flow / 2, "cs_flow_b": cs_flow / 2,
                     "lpci_flow_a": lpci_flow / 4, "lpci_flow_b": lpci_flow / 4, "lpci_flow_c": lpci_flow / 4, "lpci_flow_d": lpci_flow / 4,
-                    "eccs_flow": s.eccs_flow / GPM, "rhr_hx": 0.0,
+                    "eccs_flow": s.eccs_flow / GPM,
                     "torus_temp": f_of_c(s.torus_temp), "torus_level": 0.0,
                     "drywell_pressure": 0.9 + (12.0 if s.ads_open else 0.0), "drywell_temp": 135.0 + 0.5 * (f_of_c(s.torus_temp) - 86),
                     "torus_pressure": 0.4 + (8.0 if s.ads_open else 0.0), "drywell_h2": 0.0,
@@ -293,25 +330,33 @@ class BWRSession:
                     "turbine_inlet": p_psig - 30.0 if s.msiv > 0.5 else 0.0,
                     "first_stage": 0.6 * p_psig * min(1.0, s.tcv) * (1.0 if not s.turbine_tripped else 0.0),
                     "turbine_speed": self.turbine_speed, "tcv": 100 * s.tcv, "bypass": 100 * s.bypass,
-                    "vacuum": 28.5 if s.condenser_available else 8.0, "hotwell_temp": 101.0 if s.condenser_available else 160.0,
                     "gen_mw": gen_mw, "gen_mvar": 0.25 * gen_mw if gen_mw else 0.0, "gen_kv": 22.0 if self.gen_breaker else 0.0,
                     "gen_hz": 60.0 if self.gen_breaker else self.turbine_speed / 30.0, "gen_amps": gen_mw / 22.0 / math.sqrt(3) if gen_mw else 0.0,
                     "gen_h2": 60.0,
                     "rfpt_speed": 5200.0 * (s.feed_flow / rated_steam) ** 0.5 if running_feed and rated_steam else 0.0,
-                    "rfp_flow": s.feed_flow / MLB_H / 3, "hotwell_level": 30.0, "cond_pump": 450.0 if s.condenser_available else 0.0,
-                    "msl_rad": 3.0 * pct / 100, "bus_4kv": 4.16, "diesel_kw": 2800.0 if cond["diesel_start"] else 0.0,
-                    "dc_bus": 128.0, "grid_kv": 525.0,
-                    "mode": 3 if s.mode == "run" else 2,
+                    "rfp_flow": s.feed_flow / MLB_H / 3, "hotwell_level": 30.0,
+                    **{f"rfpt_speed_{u}": (5200.0 * (3 / sum(self.rfp) * s.feed_flow / rated_steam) ** 0.5 / 3 ** 0.5
+                                           if on and running_feed and rated_steam else 0.0)
+                       for u, on in zip("abc", self.rfp)},
+                    **{f"rfp_flow_{u}": (s.feed_flow / MLB_H / sum(self.rfp) if on and running_feed else 0.0)
+                       for u, on in zip("abc", self.rfp)},
+                    "msl_rad": 3.0 * pct / 100,
+                    **self.aux.readings(s, gen_mw),
+                    "mode": self.mode_pos,
                     "three_element": 2, "irm_range": 2, "slc": 1 if self.slc_running else 0,
                     "srv_sw": list(self.srv_switch),
                 },
                 "lamps": {
                     **cond,
+                    **self.aux.lamps(),
                     "not_scrammed": not s.scrammed, "scram_pilot": not s.scrammed,
                     "recirc_a_run": speeds[0] > 0.05 and not s.pumps[0].tripped, "recirc_a_stopped": s.pumps[0].tripped or speeds[0] <= 0.05,
                     "recirc_b_run": speeds[1] > 0.05 and not s.pumps[1].tripped, "recirc_b_stopped": s.pumps[1].tripped or speeds[1] <= 0.05,
                     "recirc_demand_auto": False, "recirc_demand_manual": True,
                     "feed_run": running_feed, "feed_stopped": not running_feed,
+                    **{f"feed_{u}_run": on and running_feed for u, on in zip("abc", self.rfp)},
+                    **{f"feed_{u}_stopped": not (on and running_feed) for u, on in zip("abc", self.rfp)},
+                    "runback": self.runback,
                     "feed_demand_auto": running_feed, "feed_demand_manual": not running_feed,
                     "pressure_auto": True, "pressure_manual": False,
                     "hpci_stopped": not s.hpci.running, "hpci_avail": s.hpci.available,
@@ -346,6 +391,21 @@ class BWRSession:
 
     # ------------------------------------------------------------------ commands
 
+    def _start_feed_pumps(self, idx: list[int]) -> None:
+        s = self.sim
+        if not self.aux.offsite:
+            raise CommandError("No power to the feed pump auxiliaries (offsite power lost)")
+        if not self.aux.count("cond_pump"):
+            raise CommandError("Feed pump suction pressure low: start a condensate pump first")
+        if s.level_in >= s.design.setpoints.level8_trip_in:
+            raise CommandError("Feed pumps cannot be reset with reactor level above Level 8")
+        if s.feed_tripped or not s.feed_available:
+            s.feed_available = True
+            s.restore_feedwater()
+        for i in idx:
+            self.rfp[i] = True
+        s._event("operator", "Reactor feed pump" + (f" {'ABC'[idx[0]]}" if len(idx) == 1 else "s") + " started")
+
     def command(self, action: str, **a) -> dict:
         if action == "reset":
             self.reset(a.get("initial", "full_power"))
@@ -370,10 +430,18 @@ class BWRSession:
                     raise CommandError("direction must be in, out or stop")
                 if s.scrammed and direction != "stop":
                     raise CommandError("Rod block: reactor scrammed")
+                if direction != "stop" and not self.aux.crd_ok():
+                    raise CommandError("No drive water: start a CRD pump")
+                if direction == "out" and self.mode_pos < 2:
+                    raise CommandError(f"Rod block: mode switch in {MODES[self.mode_pos]}")
                 s.drive_rods(direction)
             elif action == "rod_notch":
                 if s.scrammed:
                     raise CommandError("Rod block: reactor scrammed")
+                if not self.aux.crd_ok():
+                    raise CommandError("No drive water: start a CRD pump")
+                if float(a.get("notches", 1.0)) > 0 and self.mode_pos < 2:
+                    raise CommandError(f"Rod block: mode switch in {MODES[self.mode_pos]}")
                 n = float(a.get("notches", 1.0))
                 (s.withdraw_rods if n > 0 else s.insert_rods)(abs(n))
                 ev("operator", f"Rod {self.rod_selected} {'withdrawn' if n > 0 else 'inserted'} {abs(n):g} notch")
@@ -383,6 +451,8 @@ class BWRSession:
                 i = {"a": 0, "b": 1}[a["pump"].lower()]
                 pump = s.pumps[i]
                 if pump.tripped or pump.speed < 0.05:
+                    if not self.aux.offsite:
+                        raise CommandError("No power to the recirculation MG sets (offsite power lost)")
                     pump.tripped = False
                     pump.demand = max(pump.demand, d.min_pump_speed)
                     ev("operator", f"Recirculation pump {a['pump'].upper()} started")
@@ -397,11 +467,23 @@ class BWRSession:
                 s.set_level_setpoint(sp_)
                 ev("operator", f"Level set point {sp_:.0f} in")
             elif action == "feed_pump":
-                if s.feed_tripped:
-                    s.restore_feedwater()
-                    ev("operator", "Feed pumps restarted")
+                pump = str(a.get("pump", "")).lower()
+                if pump not in ("a", "b", "c"):
+                    # all three together (the instructor's loss-of-feedwater)
+                    if s.feed_tripped:
+                        self._start_feed_pumps([0, 1, 2])
+                    else:
+                        self.rfp = [False, False, False]
+                        s.trip_feedwater()
                 else:
-                    s.trip_feedwater()
+                    i = "abc".index(pump)
+                    if self.rfp[i] and not s.feed_tripped:
+                        self.rfp[i] = False
+                        ev("trip", f"Reactor feed pump {pump.upper()} tripped")
+                        if not any(self.rfp):
+                            s.trip_feedwater()
+                    else:
+                        self._start_feed_pumps([i])
             elif action in ("hpci", "rcic", "core_spray", "lpci"):
                 sysm = s._system(action)
                 if sysm.running or sysm.start_time is not None:
@@ -455,8 +537,20 @@ class BWRSession:
                 s.set_pressure_setpoint(p)
                 ev("operator", f"Pressure regulator set point {p:.0f} psig")
             elif action == "mode_switch":
-                s.mode = "startup" if s.mode == "run" else "run"
-                ev("operator", f"Mode switch to {s.mode.upper()}")
+                # one detent per turn of the key, toward SHUTDOWN then back toward RUN
+                if "position" in a:
+                    pos = MODES.index(str(a["position"]).upper())
+                else:
+                    if not 0 <= self.mode_pos + self.mode_dir <= 3:
+                        self.mode_dir = -self.mode_dir
+                    pos = self.mode_pos + self.mode_dir
+                if pos == 3 and (steam.psig(s.pressure) <= d.setpoints.msl_pressure_low_psig and s.msiv > 0.5):
+                    raise CommandError("Mode switch to RUN would isolate the MSIVs: main steam line pressure low")
+                self.mode_pos = pos
+                s.mode = "run" if pos == 3 else "startup"
+                ev("operator", f"Mode switch to {MODES[pos]}")
+                if pos == 0:
+                    s.scram("Mode switch in SHUTDOWN")
             elif action == "slc":
                 self.slc_running = not self.slc_running
                 ev("operator", "Standby liquid control " + ("started: boron injection" if self.slc_running else "stopped"))
@@ -467,6 +561,34 @@ class BWRSession:
                 ev("operator", "Generator breaker " + ("closed" if self.gen_breaker else "opened"))
             elif action == "station_blackout":
                 s.station_blackout()
+                self.aux.lose_offsite(s.t)
+            elif action == "loss_of_offsite_power":
+                if self.aux.offsite:
+                    # The RPS and MSIV solenoids lose power (scram, MSIV closure); the feed,
+                    # condensate, circulating water and recirculation pumps stop; the diesels
+                    # start and pick up the emergency buses.
+                    ev("trip", "Loss of offsite power")
+                    s.trip_feedwater()
+                    s.feed_available = False
+                    s.trip_recirc_pumps(quiet=True)
+                    s.condenser_available = False
+                    s.close_msivs("loss of offsite power (RPS buses)", quiet=True)
+                    s.trip_turbine("loss of offsite power")
+                    s.scram("Loss of RPS power (loss of offsite power)")
+                    s.core_spray.available = False
+                    s.lpci.available = False
+                    self.aux.lose_offsite(s.t, diesels_fail=False)
+                else:
+                    self.aux.restore_offsite()
+                    s.condenser_available = True
+                    s.feed_available = True
+                    ev("operator", "Offsite power restored to the station buses")
+            elif action == "aux":
+                sp = d.setpoints
+                self.aux.command(s, s.t, str(a["equip"]), str(a.get("unit", "")), self.slc_running, {
+                    "level_l2": s.level2_latched or s.level_in <= sp.level2_in,
+                    "drywell_press": s.ads_open or (any(s.srv_open) and s.torus_temp > 60),
+                })
             elif action == "ann_ack":
                 for v in self.ann.values():
                     v["acked"] = True
