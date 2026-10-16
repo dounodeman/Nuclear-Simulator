@@ -131,3 +131,9 @@ specification (NEA/NSC/DOC(2001)1) can be read in full.
   generators, radiation monitors) are simple lumped models in `reactorsim/app/bwr_aux.py` with
   typical or assumed numbers: vacuum trip 22.5 inHg and MSIV closure at 7 inHg, scram on scram
   air header below 60 psig, about 1 MW/K per RHR heat exchanger loop, 10 s diesel start.
+- Automatic actions in the session: feed pumps carry 34% / 68% / 100% of the design feed flow
+  with one / two / three running; recirculation runback to 45% pump speed on a feed pump trip
+  with Level 4 low (Typical BWR/4 runback logic, the speed limit Assumed); standby instrument air
+  compressor start below 95 psig; diesel start on Level 1 or high drywell pressure; on a loss of
+  offsite power the RPS buses de-energize (scram, MSIV closure) and the diesels pick up their
+  buses after 10 s.

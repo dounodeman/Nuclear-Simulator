@@ -42,7 +42,7 @@ const ANN_TEXT = {
   scram_air_low: "SCRAM AIR HDR LOW", torus_cooling: "RHR TORUS COOLING", rb_isolated: "RX BLDG ISOLATION",
   sgts_run: "SGTS RUNNING", rb_dp_low: "RX BLDG dP LOW", rad_high: "RB VENT / STACK RAD HI",
   diesel_run: "DIESEL GEN RUNNING", diesel_fail: "DIESEL GEN FAIL TO START", dc_low: "125V DC BATTERY LOW",
-  loop: "LOSS OF OFFSITE POWER",
+  loop: "LOSS OF OFFSITE POWER", recirc_runback: "RECIRC RUNBACK", mode_shutdown: "MODE SW IN SHUTDOWN",
 };
 const ANN_RED = new Set(["scram", "level_low_l3", "level_l2", "level_l1", "core_uncovered", "fuel_damage", "hpci_init", "rcic_init",
   "cs_init", "lpci_init", "ads_open", "turbine_trip", "msiv_closure", "station_blackout", "atws_rpt", "aprm_high", "aprm_flow",
@@ -176,7 +176,7 @@ export class RoomWorld {
     mesh.geometry = g;
     const w = z1 - z0, h = y1 - y0;
     // pixels per metre: fine enough to read the engraving from the operator's stool
-    const scale = { ann: 2300, core: 2600, rodselect: 2000, drawing: 1600, screen: 2000, switchplate: 4400 }[ud.face] || 3600;
+    const scale = { ann: 2300, core: 2600, rodselect: 2000, drawing: 1600, screen: 2000, switchplate: 4400, tag: 4400 }[ud.face] || 3600;
     const cv = document.createElement("canvas");
     cv.width = Math.min(2048, Math.max(128, Math.round(w * scale)));
     cv.height = Math.min(2048, Math.max(128, Math.round(h * scale)));
@@ -824,6 +824,7 @@ const SIG = {
   rodselect: (ud, r) => String(r.rod_selected),
   drawing: () => "static",
   switchplate: () => "static",
+  tag: () => "static",
   clock: (ud, r, L, ann, s) => String(Math.floor(s.time_s)),
 };
 
@@ -897,10 +898,31 @@ function drawSwitchPlate(f) {
   });
 }
 
+// An engraved switch name tag: white capitals on a black plate, shrunk to fit.
+function drawTag(f) {
+  const { ctx: g, cv, ud } = f;
+  const W = cv.width, H = cv.height;
+  g.fillStyle = "#141414";
+  g.fillRect(0, 0, W, H);
+  const text = String(ud.legend || "");
+  const words = text.split(" ");
+  // two lines when one would be too small to read
+  const one = Math.min(H * 0.62, (W * 0.92) / Math.max(4, text.length * 0.62));
+  if (one >= H * 0.36 || words.length < 2) {
+    vText(g, text, W / 2, H / 2, one, "#ecebe4", "center", true);
+    return;
+  }
+  const mid = Math.ceil(words.length / 2);
+  const a = words.slice(0, mid).join(" "), b = words.slice(mid).join(" ");
+  const size = Math.min(H * 0.40, (W * 0.92) / Math.max(4, Math.max(a.length, b.length) * 0.62));
+  vText(g, a, W / 2, H * 0.29, size, "#ecebe4", "center", true);
+  vText(g, b, W / 2, H * 0.72, size, "#ecebe4", "center", true);
+}
+
 const DRAW = {
   meter: drawMeter, round: drawRound, recorder: drawRecorder, digital: drawDigital, ma: drawMA,
   thumbwheel: drawThumbwheel, ann: drawAnn, core: drawCore, rodselect: drawRodSelect, clock: drawClock,
-  screen: drawScreen, drawing: drawDrawing, switchplate: drawSwitchPlate,
+  screen: drawScreen, drawing: drawDrawing, switchplate: drawSwitchPlate, tag: drawTag,
 };
 
 export { ROD_GRID };

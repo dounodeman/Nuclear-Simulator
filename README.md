@@ -95,7 +95,18 @@ of service cools the feed and raises power, losing circulating water or the air 
 vacuum (turbine trip, then MSIV closure), losing instrument air scrams the reactor, no CRD pump
 means no rod motion, no condensate pump trips the feed pumps, RWCU isolates on Level 2 and SLC,
 RHR torus cooling on service water cools the torus, and after a station blackout the diesels,
-started by hand, bring core spray and LPCI back. The finish follows
+started by hand, bring core spray and LPCI back. The automatic actions of the real plant are
+there too: each reactor feed pump trips and starts on its own switch, and losing one with Level 4
+low runs the recirculation pumps back to 45% speed so the other two can hold level; the standby
+air compressor starts on low header pressure (a pump stopped by hand stays off, as in
+pull-to-lock); the diesels start on a LOCA signal and run unloaded; on a loss of offsite power
+(instructor pushbutton on P654) the reactor scrams on lost RPS power, the diesels close onto
+their buses and the load sequencer restarts the safety loads; the four-position mode switch
+turns one detent at a time and SHUTDOWN scrams the reactor. Every switch carries its engraved
+name tag, the auxiliary benches have painted mimic lines, the annunciator horn sounds until the
+alarms are acknowledged, and the room has its supply diffusers, return grilles, smoke detectors,
+exit signs and emergency lights, fire extinguishers, the procedure bookcase and the alarm
+printer. The finish follows
 the project's reference photos of the Unit 2 boards: cream GE panels with black trim on maroon
 carpet under a white luminous ceiling, annunciator boxes of tall windows in lettered columns
 (A to J) and five numbered rows with their numbered title plates (301 F/W, 310/311 REACTOR,

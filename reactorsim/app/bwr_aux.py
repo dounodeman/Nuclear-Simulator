@@ -72,6 +72,10 @@ class Auxiliaries:
         self.offsite = True
         self.sbo_t: float | None = None
         self.diesel_t = [0.0] * 4         # time each diesel has been cranking/running
+        self.diesel_auto = [False] * 4    # started by an automatic signal (runs unloaded on the grid)
+        self.diesels_failed = False       # station blackout: the diesels do not start on their own
+        self.locked_out = {k: [False] * len(v) for k, v in self.on.items()}   # stopped by hand: no auto start
+        self._sequencer: dict[str, list[bool]] = {}
         self.vacuum = 28.5
         self.cond_o2 = 15.0
         self.conductivity = 0.08
@@ -106,17 +110,39 @@ class Auxiliaries:
     def count(self, equip: str) -> int:
         return sum(self.running(equip))
 
-    def lose_offsite(self, t: float) -> None:
-        """Loss of all offsite power with the diesels failing to start on their own."""
+    def lose_offsite(self, t: float, diesels_fail: bool = True) -> None:
+        """Loss of all offsite power. In a station blackout the diesels also fail to start on
+        their own; on a plain loss of offsite power they start, close onto their emergency buses
+        after about ten seconds and pick up the safety loads."""
         self.offsite = False
         self.sbo_t = t
+        self.diesels_failed = diesels_fail
         for k in NON_SAFETY:
             self.on[k] = [False] * len(self.on[k])
-        for k in ("crd_pump", "hpsw_pump", "torus_cool", "sgts"):
+        # the safety loads drop off with the buses; the load sequencer restarts the running ones
+        restart = {k: list(self.on[k]) for k in ("crd_pump", "hpsw_pump", "torus_cool", "sgts")}
+        for k in restart:
             self.on[k] = [False] * len(self.on[k])
-        self.on["diesel"] = [False] * 4
-        self.diesel_t = [0.0] * 4
+        self._sequencer = {} if diesels_fail else restart
         self._eccs_lost = True
+        if diesels_fail:
+            self.on["diesel"] = [False] * 4
+            self.diesel_t = [0.0] * 4
+        else:
+            for i in range(4):
+                if not self.on["diesel"][i]:
+                    self.on["diesel"][i] = True
+                    self.diesel_t[i] = 0.0
+                self.diesel_auto[i] = True
+
+    def restore_offsite(self) -> None:
+        self.offsite = True
+        self.sbo_t = None
+        self.diesels_failed = False
+        for k in ("cond_pump", "circ_pump", "rwcu_pump", "air_comp", "rb_hvac"):
+            self.on[k] = [not lock and i < (2 if k == "air_comp" else 3) for i, lock in enumerate(self.locked_out[k])]
+        self.on["rwcu_pump"] = [not self.rwcu_isolated and not l for l in self.locked_out["rwcu_pump"]]
+        self.on["rb_hvac"] = [not self.rb_isolated]
 
     # ------------------------------------------------------------------ dynamics
 
@@ -132,8 +158,23 @@ class Auxiliaries:
     def rb_signal(self, s, cond: dict) -> bool:
         return cond.get("level_l2", False) or cond.get("drywell_press", False) or self.rad("rb_vent", s) > 16.0
 
+    def _auto_start(self, s, equip: str, i: int, why: str) -> None:
+        if self.on[equip][i] or self.locked_out[equip][i] or not self.powered(equip, i):
+            return
+        self.on[equip][i] = True
+        s._event("trip", f"{NAMES[equip]}{'' if equip == 'diesel' else ' '}{UNITS[equip][i]} auto-started: {why}")
+
     def step(self, s, h: float, slc_running: bool, cond: dict) -> None:
         ev = s._event
+        # Diesels start on a LOCA signal (Level 1 or high drywell pressure) and run unloaded,
+        # ready for a loss of offsite power.
+        if (cond.get("level_l1") or cond.get("drywell_press")) and not self.diesels_failed:
+            for i in range(4):
+                if not self.on["diesel"][i] and not self.locked_out["diesel"][i]:
+                    self.on["diesel"][i] = True
+                    self.diesel_t[i] = 0.0
+                    self.diesel_auto[i] = True
+                    ev("eccs", f"Diesel generator E{i + 1} auto-start on LOCA signal")
         # Diesels crank for ten seconds before the output breaker closes on the dead bus.
         for i in range(4):
             if self.on["diesel"][i]:
@@ -148,7 +189,14 @@ class Auxiliaries:
             s.core_spray.available = True
             s.lpci.available = True
             self._eccs_lost = False
-            ev("operator", "Emergency buses energized from the diesels: core spray and LPCI available")
+            ev("operator", "Emergency buses energized: core spray and LPCI available")
+        # load sequencer: the safety loads that were running come back on their buses
+        for k, was in list(getattr(self, "_sequencer", {}).items()):
+            for i, on in enumerate(was):
+                if on and not self.on[k][i] and self.powered(k, i):
+                    self.on[k][i] = True
+                    was[i] = False
+                    ev("operator", f"{NAMES[k]} {UNITS[k][i]} restarted by the load sequencer")
 
         # Condensate pumps feed the reactor feed pumps' suction.
         if self.count("cond_pump") == 0 and not s.feed_tripped and s.feed_available:
@@ -204,7 +252,12 @@ class Auxiliaries:
             if s.rods.command != 0 or s.rods.target is not None:
                 s.drive_rods("stop")
 
-        # Instrument air.
+        # Instrument air: the standby compressor starts on low header pressure.
+        if self.air < 95.0:
+            for i in range(3):
+                if not self.on["air_comp"][i] and not self.locked_out["air_comp"][i]:
+                    self._auto_start(s, "air_comp", i, "instrument air header pressure low")
+                    break
         if self.count("air_comp"):
             self.air = min(105.0, self.air + 1.0 * h)
         else:
@@ -252,6 +305,9 @@ class Auxiliaries:
             name = NAMES[equip]
         if self.on[equip][i]:
             self.on[equip][i] = False
+            self.locked_out[equip][i] = True
+            if equip == "diesel":
+                self.diesel_auto[i] = False
             s._event("operator", f"{name} {'out of service' if equip == 'heater' else 'stopped'}")
             return
         if not self.powered(equip, i):
@@ -269,6 +325,7 @@ class Auxiliaries:
         if equip == "torus_cool" and not s.lpci.available:
             raise CommandError("RHR pumps unavailable: torus cooling cannot start")
         self.on[equip][i] = True
+        self.locked_out[equip][i] = False
         s._event("operator", f"{name} {'in service' if equip == 'heater' else 'starting' if equip == 'diesel' else 'started'}")
 
     # ------------------------------------------------------------------ readings
@@ -296,7 +353,7 @@ class Auxiliaries:
             if not self.diesel_running(i):
                 diesel_kw.append(400.0 * min(1.0, self.diesel_t[i] / DIESEL_START_S) if self.on["diesel"][i] else 0.0)
             elif self.offsite:
-                diesel_kw.append(2600.0)
+                diesel_kw.append(0.0 if self.diesel_auto[i] else 2600.0)   # LOCA start: unloaded; surveillance run: loaded
             else:
                 kw = 900.0 + 700.0 * self.running("hpsw_pump")[i] + 500.0 * self.running("crd_pump")[i % 2]
                 kw += 1200.0 * (s.lpci.running or self.running("torus_cool")[i % 2]) + 800.0 * s.core_spray.running
@@ -371,7 +428,7 @@ class Auxiliaries:
             "rb_dp_low": self.rb_dp > -0.10,
             "rad_high": self.rad("rb_vent", s) > 16.0 or self.rad("stack", s) > 5.0,
             "diesel_run": any(self.diesel_running(i) for i in range(4)),
-            "diesel_fail": not self.offsite and not any(self.on["diesel"]),
+            "diesel_fail": not self.offsite and self.diesels_failed and not any(self.on["diesel"]),
             "dc_low": not self.emergency_buses() and self.sbo_t is not None and s.t - self.sbo_t > 1800.0,
             "loop": not self.offsite,
         }

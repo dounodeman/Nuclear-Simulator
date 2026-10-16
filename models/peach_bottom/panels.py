@@ -94,6 +94,17 @@ def mats() -> dict[str, bpy.types.Material]:
         "phone": material("PB_Phone", (0.10, 0.10, 0.10), rough=0.5),
         "paper": material("PB_Paper", (0.95, 0.95, 0.92), rough=0.8),
         "binder": material("PB_Binder", (0.60, 0.15, 0.12), rough=0.7),
+        # painted mimic lines on the boards, coloured by what the line carries
+        "mimic_water": material("PB_MimicWater", (0.05, 0.22, 0.60), rough=0.5),
+        "mimic_steam": material("PB_MimicSteam", (0.62, 0.08, 0.06), rough=0.5),
+        "mimic_air": material("PB_MimicAir", (0.85, 0.65, 0.05), rough=0.5),
+        "mimic_power": material("PB_MimicPower", (0.10, 0.10, 0.10), rough=0.5),
+        "mimic_sw": material("PB_MimicServiceWater", (0.05, 0.45, 0.35), rough=0.5),
+        "grille": material("PB_Grille", (0.82, 0.82, 0.80), rough=0.6, metal=0.3),
+        "extinguisher": material("PB_Extinguisher", (0.75, 0.05, 0.04), rough=0.4),
+        "exit_sign": material("PB_ExitSign", (0.9, 0.1, 0.08), emit=(1.0, 0.12, 0.08), emit_strength=2.0),
+        "bookcase": material("PB_Bookcase", (0.36, 0.36, 0.38), rough=0.6, metal=0.3),
+        "printer": material("PB_Printer", (0.80, 0.78, 0.70), rough=0.5),
     })
     return _mats
 
@@ -230,6 +241,18 @@ def stencil_plate(frame, text, r, z, size=0.045):
     nameplate(frame, text, r, z, size=size, width=len(text) * size * 0.68 + 0.05)
 
 
+def mimic(frame, name, points, kind="water", width=0.007):
+    """A painted mimic line through (r, z) points on a panel face (straight runs between them)."""
+    m = mats()
+    mb = MeshBuilder()
+    for (r0, z0), (r1, z1) in zip(points, points[1:]):
+        if abs(z1 - z0) < 1e-6:
+            mb.box((-0.0008, -(r0 + r1) / 2, z0), (0.0016, abs(r1 - r0) + width, width))
+        else:
+            mb.box((-0.0008, -r0, (z0 + z1) / 2), (0.0016, width, abs(z1 - z0) + width))
+    mb.build(f"Mimic_{name}", m[f"mimic_{kind}"], frame)
+
+
 def lamp(frame, name, r, z, colour="red", *, tag, radius=0.011, label=None):
     """GE ET-16 style indicating light: a black square-shouldered base, a knurled chrome cap
     ring and a domed coloured lens that the page lights from the plant reading ``tag``."""
@@ -288,8 +311,25 @@ def pushbutton(frame, name, r, z, colour="black", *, role, label, radius=0.011, 
     return _props(ob, role=role, label=label)
 
 
+# Engraved switch name tags: the label up to the colon, shortened as the tags are engraved.
+_TAG_WORDS = [("Recirculation", "RECIRC"), ("Reactor feed pump", "RFP"), ("Feed pump turbine", "RFPT"),
+              ("Condensate pump", "COND PUMP"), ("Circulating water pump", "CIRC WTR PUMP"),
+              ("Feedwater heater string", "FW HTR STRING"), ("Instrument air compressor", "INST AIR COMP"),
+              ("Standby gas treatment train", "SGTS TRAIN"), ("Reactor building ventilation", "RB VENT FANS"),
+              ("Steam jet air ejector", "SJAE"), ("Diesel generator", "DIESEL GEN"), ("RHR torus cooling loop", "TORUS COOLING"),
+              ("Generator output breaker", "GEN OUTPUT BKR"), (" control switch", ""), ("Inboard", "IB"),
+              (" (LPCI)", ""), ("in service / out of service", "")]
+
+
+def switch_tag(label: str) -> str:
+    text = label.split(":")[0]
+    for a, b in _TAG_WORDS:
+        text = text.replace(a, b)
+    return " ".join(text.upper().split())
+
+
 def control_switch(frame, name, r, z, *, role, label, positions, tag=None, lights=("red", "green"),
-                   light_tags=(), spring=True, radius=0.03):
+                   light_tags=(), spring=True, radius=0.03, tag_text=None):
     """GE type SBM rotary control switch as fitted to the benchboards: a square black
     escutcheon plate engraved with the handle positions, a hub, and the handle. Spring-return
     pump and breaker switches (``spring``) carry the black pistol-grip handle; maintained
@@ -309,6 +349,10 @@ def control_switch(frame, name, r, z, *, role, label, positions, tag=None, light
                face="switchplate", positions=",".join(positions), role=role, label=label,
                hub=round((top - 0.002 - z) / (ph - 0.004), 4), lr=round(0.045 * s_ / (plate - 0.004), 4))
     MeshBuilder().cylinder((-0.012, -r, z), 0.0105, 0.006, 24, axis="x").build(f"Hub_{name}", m["keyswitch"], frame)
+    # the engraved name tag under the plate (lettering drawn by the page)
+    if tag_text != "":
+        _face_quad(f"ui_{name}_Tag", frame, r, bottom - 0.014, plate, 0.020, m["nameplate"], stand=0.002,
+                   face="tag", legend=tag_text or switch_tag(label), label=label)
     mb = MeshBuilder()
     if spring:
         # pistol grip: a thick rounded butt over the hub tapering to a pointed tip above it

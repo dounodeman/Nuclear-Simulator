@@ -112,6 +112,32 @@ export class RoomSound {
     for (let i = 0; i < chars; i++) this._click(1, 0.035, i * (0.07 + Math.random() * 0.03));
   }
 
+  // The annunciator horn: a pulsing two-tone buzz while any window flashes, until acknowledged.
+  setAlarm(on) {
+    const ctx = this.ctx;
+    if (on && this.horn && ctx.currentTime - this.horn.t0 > 590) this.setAlarm(false);   // re-arm the pulse train
+    if (!ctx || on === !!this.horn) return;
+    if (on) {
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1600;
+      const oscs = [440, 554].map((f) => { const o = ctx.createOscillator(); o.type = "square"; o.frequency.value = f; o.connect(lp); o.start(); return o; });
+      lp.connect(g); g.connect(this.master);
+      // on half a second, off half a second
+      const t0 = ctx.currentTime;
+      for (let i = 0; i < 600; i++) {
+        g.gain.setValueAtTime(0.05, t0 + i);
+        g.gain.setValueAtTime(0.0, t0 + i + 0.5);
+      }
+      this.horn = { g, oscs, t0 };
+    } else {
+      const { g, oscs } = this.horn;
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setValueAtTime(0, ctx.currentTime);
+      oscs.forEach((o) => o.stop(ctx.currentTime + 0.05));
+      this.horn = null;
+    }
+  }
+
   setVolume(v) {
     this.volume = v;
     if (this.master) this.master.gain.setTargetAtTime(this.enabled ? v : 0, this.ctx.currentTime, 0.1);

@@ -118,10 +118,14 @@ def test_losing_circulating_water_trips_the_turbine_then_isolates_the_condenser(
     assert st["readings"]["vacuum"] < 7.0 and not st["lamps"]["condenser_avail"] and st["lamps"]["msiv_closed"]
 
 
-def test_losing_instrument_air_scrams_the_reactor():
+def test_standby_air_compressor_starts_and_losing_all_air_scrams_the_reactor():
     s = BWRSession("full_power", seed=1)
     s.command("aux", equip="air_comp", unit="a")
     s.command("aux", equip="air_comp", unit="b")
+    s.advance(90.0)
+    st = s.state()
+    assert st["lamps"]["air_comp_c_run"] and not st["scrammed"]     # standby auto-start on low pressure
+    s.command("aux", equip="air_comp", unit="c")                     # stopped by hand: stays off
     s.advance(120.0)
     assert not s.state()["scrammed"] and s.state()["annunciators"]["air_low"] == "flash"
     s.advance(80.0)
@@ -180,3 +184,55 @@ def test_crd_condensate_and_cleanup_interlocks():
     assert st["lamps"]["rwcu_isolated"] and st["readings"]["rwcu_flow"] == 0.0
     with pytest.raises(CommandError):
         s.command("aux", equip="rwcu_pump", unit="a")   # SLC still injecting
+
+
+def test_one_feed_pump_trip_runs_the_recirculation_back_without_a_scram():
+    s = BWRSession("full_power", seed=1)
+    s.command("feed_pump", pump="a")
+    s.advance(120.0)
+    st = s.state()
+    assert st["lamps"]["feed_a_stopped"] and st["lamps"]["feed_b_run"] and st["lamps"]["runback"]
+    assert not st["scrammed"] and 50.0 < st["readings"]["aprm"] < 80.0
+    assert st["readings"]["recirc_demand"] == pytest.approx(45.0, abs=0.5)
+    assert st["readings"]["level"] == pytest.approx(35.0, abs=3.0)
+    s.command("feed_pump", pump="a")
+    s.advance(2.0)
+    assert not s.state()["lamps"]["runback"]
+
+
+def test_loss_of_offsite_power_starts_the_diesels_and_restores_the_ecc():
+    s = BWRSession("full_power", seed=1)
+    s.command("loss_of_offsite_power")
+    s.advance(3.0)
+    st = s.state()
+    assert st["scrammed"]
+    assert st["lamps"]["lpci_unavail"] and st["annunciators"]["loop"] == "flash"
+    s.advance(15.0)
+    st = s.state()
+    assert all(st["lamps"][f"diesel_{i}_run"] for i in range(1, 5))
+    assert not st["lamps"]["lpci_unavail"] and st["lamps"]["crd_pump_a_run"]   # load sequencer
+    s.command("loss_of_offsite_power")                                          # restore
+    s.advance(2.0)
+    assert s.state()["lamps"]["offsite_power"] and s.state()["lamps"]["cond_pump_a_run"]
+
+
+def test_diesels_start_on_a_loca_signal_and_run_unloaded():
+    s = BWRSession("full_power", seed=1)
+    s.command("ads_manual")
+    s.advance(15.0)
+    r = s.state()["readings"]
+    assert all(s.state()["lamps"][f"diesel_{i}_run"] for i in range(1, 5))
+    assert r["diesel_kw_1"] == 0.0 and r["bus_4kv"] == pytest.approx(4.16)
+
+
+def test_mode_switch_turns_one_detent_at_a_time_and_shutdown_scrams():
+    s = BWRSession("full_power", seed=1)
+    s.command("mode_switch")
+    assert s.state()["readings"]["mode"] == 2 and not s.state()["scrammed"]   # STARTUP
+    s.command("mode_switch")
+    assert s.state()["readings"]["mode"] == 1                                  # REFUEL
+    s.command("mode_switch")
+    st = s.state()
+    assert st["readings"]["mode"] == 0 and st["scrammed"] and "SHUTDOWN" in st["scram_causes"][0]
+    s.command("mode_switch")
+    assert s.state()["readings"]["mode"] == 1                                  # back toward RUN

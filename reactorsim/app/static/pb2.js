@@ -69,7 +69,7 @@ function control(role, args, mesh) {
   const m = /^srv_(\d+)$/.exec(role);
   if (m) return cmd("srv", { valve: +m[1] });
   // pumps, heater strings, fans and diesels on the auxiliary benchboards: "aux:<equipment>:<unit>"
-  if (role.startsWith("aux:")) {
+  if (String(role || "").startsWith("aux:")) {
     const [, equip, unit] = role.split(":");
     return cmd("aux", { equip, unit });
   }
@@ -109,13 +109,14 @@ function control(role, args, mesh) {
     case "press_sp_lower": return cmd("pressure_setpoint", { delta: -5 });
     case "gen_breaker": return cmd("gen_breaker");
     case "station_blackout": return cmd("station_blackout");
+    case "loss_of_offsite_power": return cmd("loss_of_offsite_power");
     case "mode_switch": return cmd("mode_switch");
     case "slc": return cmd("slc");
     case "ann_ack": return cmd("ann_ack");
     case "ann_reset": return cmd("ann_reset");
     case "ann_test": return cmd("ann_test");
     default:
-      if (fp) return cmd("feed_pump");
+      if (fp) return cmd("feed_pump", { pump: role.slice(-1) });
       return setPrompt(`${label} (${r.mode || ""})`);
   }
 }
@@ -170,6 +171,7 @@ function render(s) {
   $("#rpsFail").setAttribute("aria-pressed", String(!!s.lamps.rps_trouble));
   $("#rpsFail").classList.toggle("on", !!s.lamps.rps_trouble);
   world?.update(s, hist);
+  sound.setAlarm(Object.values(s.annunciators || {}).includes("flash"));
 }
 
 // ------------------------------------------------------------------ menu

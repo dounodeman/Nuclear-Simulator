@@ -182,6 +182,7 @@ class BWRSimulator:
         self.level_in = d.normal_level_in
         self.feed_temp = d.feedwater_temp_c
         self.heater_fraction = 1.0  # share of the feedwater heater strings in service
+        self.feed_capacity = 1.0    # share of the feed pumps' capacity running (three pumps)
         self.condenser_available = True
         self.torus_temp = d.torus_initial_temp
 
@@ -574,7 +575,7 @@ class BWRSimulator:
             rated = self._rated_steam_flow()
             err = self.level_setpoint_in - L
             self.feed_demand = min(max(self.steam_out + d.level_gain * rated * err, 0.0),
-                                   d.feedwater_max_fraction * rated)
+                                   d.feedwater_max_fraction * rated * self.feed_capacity)
 
         # Alarms.
         self._alarm(L <= sp.level4_alarm_in, "Reactor water level low")
